@@ -92,13 +92,6 @@ vbo_torre = ctx.buffer(dados.tobytes())
 vao_torre = ctx.vertex_array(prog, [(vbo_torre,"3f 3f","vPosition","vNorm")])
 
 
-visao = glm.lookAt(glm.vec3(1.5, 0.8, 2.0), glm.vec3(0.0, 0.0, 0.0), glm.vec3(0.0, 1.0, 0.0))
-proj = glm.perspective(glm.radians(45.0), 1.0, 0.1, 100.0)
-prog["u_visao"].write(visao.to_bytes())
-prog["u_projecao"].write(proj.to_bytes())
-
-
-
 
 def tecla(window, key, scancode, action, mods):
     global dt
@@ -156,7 +149,7 @@ while not glfw.window_should_close(janela):
 
     ctx.clear(*FUNDO)
     agora = glfw.get_time()
-    dt = agora - t_ant
+    dt = min(0.05,agora - t_ant)
     t_ant = agora
 
     avancar = float(glfw.get_key(janela, glfw.KEY_W) == glfw.PRESS) - float(glfw.get_key(janela, glfw.KEY_S) == glfw.PRESS)
