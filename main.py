@@ -32,7 +32,7 @@ class EstadoMouse:
 
 @dataclass
 class EstadoCTX:
-    """Armazena o estado de arrasto do botão direito para rotação da câmera."""
+    """Armazena o estado do contexto geral da janela e do opengl."""
 
     vsync : bool = True
 
