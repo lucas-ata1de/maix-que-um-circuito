@@ -36,14 +36,14 @@ help:
 	cmd "install"        "Instala os pacotes necessários (moderngl, glfw, PyGLM, numpy)"; \
 	cmd "install-dev"    "Instala também ferramentas de análise (ruff, pyright)"; \
 	sec "Testes & Qualidade:"; \
-	cmd "test"           "Executa a validação dos módulos (alg.py e camera.py)"; \
+	cmd "test"           "Executa a validação dos módulos (grafo.py e camera.py)"; \
 	cmd "check"          "Verifica sintaxe/estilo (Ruff) e tipagem estática (Pyright)"; \
 	cmd "lint"           "Alias para 'make check'"; \
 	sec "Formatação Markdown (Prettier):"; \
 	cmd "fmt, format"    "Formata recursivamente todos os .md com Prettier (ignora . e __)"; \
 	cmd "fmt-check"      "Verifica a conformidade de formatação dos .md"; \
 	sec "Manutenção, Builds & Limpeza:"; \
-	cmd "clean"          "Remove caches Python, builds locais e resíduos LaTeX"; \
+	cmd "clean"          "Remove caches Python e resíduos LaTeX"; \
 	cmd "clean-builds"   "Remove artefatos de build e empacotamento (dist, build, *.zip)"; \
 	cmd "purge"          "Executa clean + clean-builds e remove ambientes (.venv, .conda)"; \
 	echo ""
@@ -54,7 +54,7 @@ help:
 
 setup env venv:
 	echo "🐍 Configurando ambiente virtual (.venv)..."
-	if which uv > "/dev/null" 2>&1; then \
+	if command -v uv >/dev/null 2>&1; then \
 		uv venv --system-site-packages .venv; \
 	else \
 		python3 -m venv --system-site-packages .venv; \
@@ -65,13 +65,13 @@ setup env venv:
 install:
 	echo "📦 Instalando dependências do projeto..."
 	if [ ! -d ".venv" ]; then \
-		if which uv > "/dev/null" 2>&1; then \
+		if command -v uv >/dev/null 2>&1; then \
 			uv venv --system-site-packages .venv; \
 		else \
 			python3 -m venv --system-site-packages .venv; \
 		fi; \
 	fi
-	if which uv > "/dev/null" 2>&1; then \
+	if command -v uv >/dev/null 2>&1; then \
 		if [ -f "requirements.txt" ]; then \
 			uv pip install --python .venv/bin/python -r requirements.txt; \
 		else \
@@ -89,7 +89,7 @@ install:
 
 install-dev: install
 	echo "🛠️  Instalando ferramentas de desenvolvimento (Ruff & Pyright)..."
-	if which uv > "/dev/null" 2>&1; then \
+	if command -v uv >/dev/null 2>&1; then \
 		uv pip install --python .venv/bin/python $(DEV_PACKAGES); \
 	else \
 		.venv/bin/python -m pip install $(DEV_PACKAGES); \
@@ -109,8 +109,8 @@ release:
 	$(PYTHON) main.py --release
 
 test:
-	echo "🧪 Executando testes dos módulos (alg.py e camera.py)..."
-	$(PYTHON) alg.py
+	echo "🧪 Executando testes dos módulos (grafo.py e camera.py)..."
+	$(PYTHON) grafo.py
 	$(PYTHON) camera.py
 	$(MAKE) clean
 	echo "✅ Testes dos módulos concluídos com sucesso!"
@@ -123,7 +123,7 @@ check:
 	echo "🔍 [1/2] Verificando sintaxe e estilo com Ruff..."
 	if [ -x ".venv/bin/ruff" ]; then \
 		.venv/bin/ruff check --cache-dir /tmp/ruff-cache --select E,F,W --ignore E501 . && echo "  ✅ Ruff: nenhuma violação de sintaxe encontrada."; \
-	elif which ruff > "/dev/null" 2>&1; then \
+	elif command -v ruff >/dev/null 2>&1; then \
 		ruff check --cache-dir /tmp/ruff-cache --select E,F,W --ignore E501 . && echo "  ✅ Ruff: nenhuma violação de sintaxe encontrada."; \
 	else \
 		echo "  ⚠️  Ruff não encontrado. Rode 'make install-dev' ou instale ruff."; \
@@ -131,9 +131,9 @@ check:
 	echo "🔍 [2/2] Verificando tipagem estática com Pyright..."
 	if [ -x ".venv/bin/pyright" ]; then \
 		.venv/bin/pyright . && echo "  ✅ Pyright: 0 erros de tipagem encontrados."; \
-	elif which pyright > "/dev/null" 2>&1; then \
+	elif command -v pyright >/dev/null 2>&1; then \
 		pyright . && echo "  ✅ Pyright: 0 erros de tipagem encontrados."; \
-	elif which npx > "/dev/null" 2>&1; then \
+	elif command -v npx >/dev/null 2>&1; then \
 		npx --yes pyright . && echo "  ✅ Pyright: 0 erros de tipagem encontrados."; \
 	else \
 		echo "  ⚠️  Pyright/npx não encontrado. Rode 'make install-dev' ou instale pyright."; \
@@ -148,20 +148,20 @@ lint: check
 ### ================================
 
 clean:
-	echo "🧹 Limpando caches temporários, builds e resíduos LaTeX..."
-	find . -type d \( -name "__pycache__" -o -name ".ruff_cache" -o -name ".pytest_cache" -o -name ".mypy_cache" -o -name "build" -o -name "dist" -o -name "*.egg-info" \) -exec rm -rf {} + 2> "/dev/null" || true
-	find . -type f \( -name "*.py[cod]" -o -name "*$$py.class" -o -name "*.aux" -o -name "*.log" -o -name "*.out" -o -name "*.toc" -o -name "*.lof" -o -name "*.lot" -o -name "*.fls" -o -name "*.fdb_latexmk" -o -name "*.synctex.gz" -o -name "*.bbl" -o -name "*.blg" -o -name "*.tmp" -o -name "*.bak" -o -name "*~" \) -delete 2> "/dev/null" || true
+	echo "🧹 Limpando caches temporários e resíduos LaTeX..."
+	find . -type d \( -name "__pycache__" -o -name ".ruff_cache" -o -name ".pytest_cache" -o -name ".mypy_cache" \) -exec rm -rf {} + 2>/dev/null || true
+	find . -type f \( -name "*.py[cod]" -o -name "*$$py.class" -o -name "*.aux" -o -name "*.log" -o -name "*.out" -o -name "*.toc" -o -name "*.lof" -o -name "*.lot" -o -name "*.fls" -o -name "*.fdb_latexmk" -o -name "*.synctex.gz" -o -name "*.bbl" -o -name "*.blg" -o -name "*.tmp" -o -name "*.bak" -o -name "*~" \) -delete 2>/dev/null || true
 	echo "✅ Caches e resíduos limpos com sucesso!"
 
 clean-builds:
 	echo "📦 Removendo artefatos de build e empacotamento..."
-	find . -type d \( -name "build" -o -name "dist" -o -name "*.egg-info" \) -exec rm -rf {} + 2> "/dev/null" || true
-	find . -maxdepth 2 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -delete 2> "/dev/null" || true
+	find . -type d \( -name "build" -o -name "dist" -o -name "*.egg-info" \) -exec rm -rf {} + 2>/dev/null || true
+	find . -maxdepth 2 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -delete 2>/dev/null || true
 	echo "✅ Artefatos de build removidos com sucesso!"
 
 purge: clean clean-builds
 	echo "🗑️  Removendo ambientes virtuais (.venv, venv, env, .conda)..."
-	find . -type d \( -name ".venv" -o -name "venv" -o -name "env" -o -name ".conda" \) -exec rm -rf {} + 2> "/dev/null" || true
+	find . -type d \( -name ".venv" -o -name "venv" -o -name "env" -o -name ".conda" \) -exec rm -rf {} + 2>/dev/null || true
 	echo "✅ Ambientes virtuais e builds removidos com sucesso!"
 
 ### ================================
@@ -170,9 +170,9 @@ purge: clean clean-builds
 
 fmt format fmt-md prettier:
 	echo "✨ Formatando arquivos Markdown (.md) com Prettier..."
-	if which prettier > "/dev/null" 2>&1; then \
+	if command -v prettier >/dev/null 2>&1; then \
 		PRETTIER="prettier"; \
-	elif which npx > "/dev/null" 2>&1; then \
+	elif command -v npx >/dev/null 2>&1; then \
 		PRETTIER="npx --yes prettier"; \
 	else \
 		echo "  ⚠️  Prettier não encontrado. Instale Node.js/npx ou prettier globalmente."; \
@@ -183,9 +183,9 @@ fmt format fmt-md prettier:
 
 fmt-check check-fmt:
 	echo "🔍 Verificando formatação dos arquivos Markdown (.md) com Prettier..."
-	if which prettier > "/dev/null" 2>&1; then \
+	if command -v prettier >/dev/null 2>&1; then \
 		PRETTIER="prettier"; \
-	elif which npx > "/dev/null" 2>&1; then \
+	elif command -v npx >/dev/null 2>&1; then \
 		PRETTIER="npx --yes prettier"; \
 	else \
 		echo "  ⚠️  Prettier não encontrado. Instale Node.js/npx ou prettier globalmente."; \
