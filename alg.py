@@ -6,7 +6,7 @@ class Graph:
         self.n=n
         self.m=m
         self.adj=[[] for _ in range(n)]
-        self.X = [0]*n if not X else X
+        self.X = sorteia_postes(self.n)
     
     def add_edge(self,u,v):
         self.adj[u].append(v)
@@ -83,6 +83,8 @@ def acha_opt(grafo): # algoritmo que roda 10 vezes fazendo uma escola gulosa de 
         opt = max(opt,curr)
     grafo.X= X_original
     return opt
+
+
 def conta_do_corte(grafo):
     adj = grafo.adj
     n = grafo.n
@@ -111,8 +113,10 @@ def sorteia_grafo(n: int,conexo=True, p=0.5 ) -> Graph: #retorna um grafo aleato
 
 
 
-grafo = sorteia_grafo(4,False)
+grafo = sorteia_grafo(10,True)
 grafo.printG()
+print(conta_do_corte(grafo))
+print(grafo.X)
 print(acha_opt(grafo))
 
 

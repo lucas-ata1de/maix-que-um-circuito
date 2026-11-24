@@ -5,6 +5,8 @@ import glfw
 import glm
 import moderngl
 import numpy as np
+import camera
+import alg
 
 SHADERS = Path(__file__).parent / "shaders"
 CAMINHO = Path(__file__).parent/"offs"/"torre.off"
@@ -37,10 +39,12 @@ def ler_off(caminho):
     return vertices, indices
 
 
-# ------------------------------------------------------------ geometria
+def redimensionar(window,w,h):
+    ctx.viewport = (0, 0, max(1,w), max(1,h))
+    cam.redimensionar(max(1,w), max(1,h))
 
 
-# ------------------------------------------------------------ inicializacao
+
 
 
 glfw.init()
@@ -50,10 +54,21 @@ glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 0)
 glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
 glfw.window_hint(glfw.SAMPLES, 4)
-glfw.window_hint(glfw.RESIZABLE, False)
+glfw.window_hint(glfw.RESIZABLE, True)
+
+cam = camera.Camera()
 
 janela = glfw.create_window(LADO, LADO, "Maix que um circuito", None, None)
+
+glfw.make_context_current(janela)
+glfw.swap_interval(1)
+ctx = moderngl.create_context()
+ctx.enable(moderngl.DEPTH_TEST)
+ctx.enable(moderngl.CULL_FACE)
+
 posicoes, indices = ler_off(CAMINHO)
+
+
 
 minimo,maximo = posicoes.min(axis=0), posicoes.max(axis=0)
 centro = (minimo + maximo)/2
@@ -67,11 +82,6 @@ tri_nor = np.repeat(n_face[:, None, :], 3, axis=1)
 dados = np.concatenate([tri_pos, tri_nor], axis=2).astype("f4")
 
 
-glfw.make_context_current(janela)
-glfw.swap_interval(1)
-ctx = moderngl.create_context()
-ctx.enable(moderngl.DEPTH_TEST)
-ctx.enable(moderngl.CULL_FACE)
 
 prog = ctx.program(
     vertex_shader=(SHADERS / "shader.vert").read_text(encoding="utf-8"),
@@ -91,6 +101,7 @@ prog["u_projecao"].write(proj.to_bytes())
 
 
 def tecla(window, key, scancode, action, mods):
+    global dt
     if action != glfw.PRESS:
         return
     if key == glfw.KEY_ESCAPE:
@@ -99,9 +110,54 @@ def tecla(window, key, scancode, action, mods):
         ctx.disable(moderngl.CULL_FACE)
     if key == glfw.KEY_V:
         ctx.enable(moderngl.CULL_FACE)
+    if key == glfw.KEY_T:
+        cam.alternar_modo()
+    if key == glfw.KEY_W:
+        cam.mover(1,0,min(dt,0.05),0)
+    if key == glfw.KEY_A:
+        cam.mover(0,-1,min(dt,0.05),0)
+    if key == glfw.KEY_S:
+        cam.mover(-1,0,min(dt,0.05),0)
+    if key == glfw.KEY_D:
+        cam.mover(0,1,min(dt,0.05),0)
+    if key == glfw.KEY_E:
+        cam.mover(0,0,min(dt,0.05),1)
+    if key == glfw.KEY_Q:
+        cam.mover(0,0,min(dt,0.05),-1)
 
+
+girando,ultimo_x,ultimo_y = False,None,None
+
+def mouse(window, button, action, mods):
+    global girando,ultimo_x,ultimo_y
+
+    if button == glfw.MOUSE_BUTTON_RIGHT and action == glfw.RELEASE:
+        girando=False
+        ultimo_x, ultimo_y = None, None
+    if button == glfw.MOUSE_BUTTON_RIGHT and action == glfw.PRESS:
+        girando=True
+        ultimo_x, ultimo_y = None, None
+
+def cursor(window,xpos,ypos):
+    global ultimo_x,ultimo_y
+    if not girando:
+        return
+
+    if ultimo_x is not None and ultimo_y is not None:
+        dx,dy = xpos - ultimo_x , ypos - ultimo_y
+        cam.girar(dx,dy)
+    ultimo_x,ultimo_y = xpos, ypos
+    
+
+def scroll(window,xoffset, yoffset):
+    cam.zoom(yoffset)
 
 glfw.set_key_callback(janela, tecla)
+glfw.set_mouse_button_callback(janela,mouse)
+glfw.set_cursor_pos_callback(janela,cursor)
+glfw.set_scroll_callback(janela,scroll)
+glfw.set_framebuffer_size_callback(janela, redimensionar)
+redimensionar(janela, *glfw.get_framebuffer_size(janela))
 
 # --------------------------------------------------------- laco principal
 
@@ -117,8 +173,7 @@ while not glfw.window_should_close(janela):
     t_ant = agora
     angulo += 0.8 * dt
 
-    modelo = glm.rotate(glm.mat4(1.0), angulo, glm.vec3(0.0, 1.0, 0.0)) * M_enq
-    prog["u_modelo"].write(modelo.to_bytes())
+
     vao_torre.render(moderngl.TRIANGLES)
 
     glfw.swap_buffers(janela)
