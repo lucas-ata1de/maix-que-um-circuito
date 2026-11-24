@@ -2,15 +2,26 @@ from dataclasses import dataclass
 import grafo
 import random
 
-@dataclass
 class EstadoJogo:
     """Armazena estado atual do jogo, o grafo ,corte atual etc"""
-    n = 0
-    graph = grafo.sorteia_grafo(n)
-    corte_atual = graph.X
-    meta = grafo.acha_opt(graph)
-    tempo_restante = 30
-    estado = "START"
+    n: int = 0 
+    def __init__(self,n: int =8,meio_lado : float =12,dist_min: float = 2.2):
+        self.meio_lado = meio_lado
+        self.n = n
+        self.dist_min = dist_min
+        self.iniciar_fase(n)
+
+    def iniciar_fase(self,n):
+        self.meta = 0
+        self.tam_corte_atual = 1
+        self.tempo_restante = 60.0
+        self.estado = "START"
+        self.posicoes = sortear_posicoes(n,self.meio_lado,self.dist_min)
+        while self.meta <= self.tam_corte_atual:
+            self.graph = grafo.sorteia_grafo(n,True,0.35)
+            grafo.sorteia_ate_meioaprox(self.graph)
+            self.tam_corte_atual = grafo.conta_do_corte(self.graph)
+            self.meta = grafo.acha_opt(self.graph)
 
 
 
@@ -23,14 +34,32 @@ def sortear_posicoes(n, meio_lado, dist_min):
     lista = []
     margem = 2.0
     limite = meio_lado - margem
-    for i in range(n):
-        (x,y,z) = (random.uniform(-limite,limite),0,random.uniform(-limite,limite))
-        denovo = False
-        for j in range(i):
-            if distquad(x,y,z,lista[j][0],lista[j][1],lista[j][2]) < dist_min**2:
-                denovo=True
-        if denovo:
-            i-=1
+    tentativas=0
+    while len(lista) < n:
+        x = random.uniform(-limite, limite)
+        z = random.uniform(-limite, limite)
+        if all(distquad(x, 0.0, z, px, py, pz) >= dist_min ** 2 for px, py, pz in lista):
+            lista.append((x, 0.0, z))
+            tentativas = 0
         else:
-            lista.append((x,y,z))
+            tentativas += 1
+            if tentativas > 300:
+                dist_min *= 0.9
+                tentativas = 0
+        return lista
+
+def inverter_torre(self, u: int) -> None:
+    if self.estado != "PLAYING":
+            return
+    self.graph.troca_xi(u)
+    self.tam_corte_atual = grafo.conta_do_corte(self.graph)
+    if self.tam_corte_atual >= self.meta:
+        self.estado = "VICTORY"
+
+def atualizar(self, dt: float) -> None:
+    if self.estado != "PLAYING":
+        return
+    self.tempo_restante = max(0.0, self.tempo_restante - dt)
+    if self.tempo_restante <= 0.0:
+        self.estado = "GAME_OVER"
 

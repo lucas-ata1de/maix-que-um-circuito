@@ -10,6 +10,7 @@ import moderngl
 import numpy as np
 import geometria as geo
 import camera
+import jogo
 
 SHADERS = Path(__file__).parent / "shaders"
 CAMINHO = Path(__file__).parent / "modelos" / "torre.off"
@@ -61,6 +62,7 @@ def main() -> None:
 
     estado_mouse = EstadoMouse()
     estado_ctx = EstadoCTX()
+    estado_jogo = jogo.EstadoJogo()
 
     glfw.make_context_current(janela)
     glfw.swap_interval(int(estado_ctx.vsync))
@@ -69,15 +71,32 @@ def main() -> None:
     ctx.enable(moderngl.DEPTH_TEST)
     ctx.enable(moderngl.CULL_FACE)
 
-    cam = camera.Camera()
+    cam = camera.Camera(pos=(0.0,9.0,18.0),altura_aerea=28)
     dados,  m_enq = geo.carregar_off(CAMINHO)
 
     prog = ctx.program(
         vertex_shader=(SHADERS / "shader.vert").read_text(encoding="utf-8"),
         fragment_shader=(SHADERS / "shader.frag").read_text(encoding="utf-8"),
     )
+
     vbo_torre = ctx.buffer(dados.tobytes())
     vao_torre = ctx.vertex_array(prog, [(vbo_torre, "3f 3f 2x4", "vPosition", "vNorm")])
+
+    vbo_piso = ctx.buffer(geo.criar_piso(estado_jogo.meio_lado).tobytes())
+    vao_piso = ctx.vertex_array(prog, [(vbo_piso, "3f 3f 2x4", "vPosition", "vNorm")])
+
+    vbo_cubo = ctx.buffer(geo.criar_cubo().tobytes())
+    vao_cubo = ctx.vertex_array(prog, [(vbo_cubo, "3f 3f 2x4", "vPosition", "vNorm")])
+
+    L = estado_jogo.meio_lado
+    I = glm.mat4(1.0)
+
+    bordas = [
+        glm.translate(I, glm.vec3(0.0, 0.2,  L)) * glm.scale(I, glm.vec3(2 * L + 0.4, 0.4, 0.4)),
+        glm.translate(I, glm.vec3(0.0, 0.2, -L)) * glm.scale(I, glm.vec3(2 * L + 0.4, 0.4, 0.4)),
+        glm.translate(I, glm.vec3( L, 0.2, 0.0)) * glm.scale(I, glm.vec3(0.4, 0.4, 2 * L - 0.4)),
+        glm.translate(I, glm.vec3(-L, 0.2, 0.0)) * glm.scale(I, glm.vec3(0.4, 0.4, 2 * L - 0.4)),
+    ]
 
     def atualizar_titulo() -> None:
         vsync_txt = "ON" if estado_ctx.vsync else "OFF"
@@ -180,8 +199,8 @@ def main() -> None:
         lateral = float(glfw.get_key(janela, glfw.KEY_D) == glfw.PRESS) - float(
             glfw.get_key(janela, glfw.KEY_A) == glfw.PRESS
         )
-        vertical = float(glfw.get_key(janela, glfw.KEY_E) == glfw.PRESS) - float(
-            glfw.get_key(janela, glfw.KEY_Q) == glfw.PRESS
+        vertical = float(glfw.get_key(janela, glfw.KEY_SPACE) == glfw.PRESS) - float(
+            glfw.get_key(janela, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
         )
 
         cam.mover(avancar, lateral, dt, vertical)

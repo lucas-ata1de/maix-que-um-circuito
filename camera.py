@@ -20,7 +20,7 @@ SENSIBILIDADE_MOUSE = 0.005
 PASSO_ZOOM_LIVRE = 0.8
 PASSO_ZOOM_AEREO = 1.2
 EPSILON = 1e-6
-OFFSET_Z_AEREO = 0.01
+OFFSET_Z_AEREO = 0.2
 
 
 class Camera:
@@ -102,7 +102,7 @@ class Camera:
     def zoom(self, yoffset: float) -> None:
         """Aproxima ou afasta a câmera conforme o modo ativo."""
         if self.modo == "livre":
-            self.pos += self.frente() * (yoffset * PASSO_ZOOM_LIVRE)
+            self.pos += self.frente() * (yoffset * PASSO_ZOOM_LIVRE) 
         else:
             nova_altura = self.altura_aerea - yoffset * PASSO_ZOOM_AEREO
             self.altura_aerea = max(
