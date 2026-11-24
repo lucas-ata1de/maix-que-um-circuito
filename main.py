@@ -12,7 +12,7 @@ import numpy as np
 import camera
 
 SHADERS = Path(__file__).parent / "shaders"
-CAMINHO = Path(__file__).parent / "offs" / "torre.off"
+CAMINHO = Path(__file__).parent / "modelos" / "torre.off"
 TITULO_JANELA = "Maix que um Circuito"
 LADO = 700
 FUNDO = (0.10, 0.11, 0.13, 1.0)
