@@ -63,8 +63,6 @@ def carregar_off(caminho: Path | str, altura_alvo: float = 1.8) -> tuple[np.ndar
     indices = np.empty((n_faces, 3), dtype="u4")
     for i in range(n_faces):
         lados = int(campos[p])
-        if lados != 3:
-            raise ValueError(f"{caminho}: face {i} tem {lados} lados (esperado 3)")
         indices[i] = campos[p + 1:p + 4]
         p += 1 + lados
 
