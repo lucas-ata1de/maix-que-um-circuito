@@ -112,20 +112,7 @@ def tecla(window, key, scancode, action, mods):
         ctx.enable(moderngl.CULL_FACE)
     if key == glfw.KEY_T:
         cam.alternar_modo()
-    if key == glfw.KEY_W:
-        cam.mover(1,0,min(dt,0.05),0)
-    if key == glfw.KEY_A:
-        cam.mover(0,-1,min(dt,0.05),0)
-    if key == glfw.KEY_S:
-        cam.mover(-1,0,min(dt,0.05),0)
-    if key == glfw.KEY_D:
-        cam.mover(0,1,min(dt,0.05),0)
-    if key == glfw.KEY_E:
-        cam.mover(0,0,min(dt,0.05),1)
-    if key == glfw.KEY_Q:
-        cam.mover(0,0,min(dt,0.05),-1)
-
-
+    
 girando,ultimo_x,ultimo_y = False,None,None
 
 def mouse(window, button, action, mods):
@@ -171,8 +158,15 @@ while not glfw.window_should_close(janela):
     agora = glfw.get_time()
     dt = agora - t_ant
     t_ant = agora
-    angulo += 0.8 * dt
 
+    avancar = float(glfw.get_key(janela, glfw.KEY_W) == glfw.PRESS) - float(glfw.get_key(janela, glfw.KEY_S) == glfw.PRESS)
+    lateral = float(glfw.get_key(janela, glfw.KEY_D) == glfw.PRESS) - float(glfw.get_key(janela, glfw.KEY_A) == glfw.PRESS)
+    vertical = float(glfw.get_key(janela, glfw.KEY_E) == glfw.PRESS) - float(glfw.get_key(janela, glfw.KEY_Q) == glfw.PRESS)
+
+    cam.mover(avancar, lateral, dt,vertical)
+    prog["u_modelo"].write(M_enq.to_bytes())
+    prog["u_visao"].write(cam.visao().to_bytes())
+    prog["u_projecao"].write(cam.projecao().to_bytes())
 
     vao_torre.render(moderngl.TRIANGLES)
 
