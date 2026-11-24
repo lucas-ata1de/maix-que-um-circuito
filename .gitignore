@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+.conda/
+
+# Empacotamento e temporarios
+*.zip
+*.tar.gz
+*.tmp
+*.bak
+*~
+
+# Fontes brutas de modelos 3D (o jogo le apenas .off)
+*.obj
+*.mtl
+*.blend
+*.usdz
+*.gltf
+*.glb
+offs/high-voltage-transmission-line-tower-tileable/
+
+# LaTeX (arquivos gerados na compilacao do relatorio)
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+
+# Editores e sistema operacional
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
