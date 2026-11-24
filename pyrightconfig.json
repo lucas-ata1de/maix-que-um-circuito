@@ -1,10 +1,17 @@
 {
-  "include": ["."],
-  "exclude": ["**/__pycache__", ".git"],
-  "extraPaths": ["."],
-  "venvPath": "/home/lucas/miniconda3/envs",
-  "venv": "cgcourse",
-  "stubPath": "/home/lucas/miniconda3/envs/cgcourse/lib/python3.11/site-packages/pyglm-stubs",
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".git",
+    ".venv"
+  ],
+  "extraPaths": [
+    "."
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",
   "reportAttributeAccessIssue": "none"
