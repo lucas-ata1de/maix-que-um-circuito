@@ -50,7 +50,7 @@ class Camera:
         if self.modo != "livre":
             return
         desloc = (
-            self.frente() * avancar
+            glm.vec3(self.frente().x,0,self.frente().z) * avancar
             + self.direita() * lateral
             + self.cima * vertical
         )

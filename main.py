@@ -73,7 +73,7 @@ posicoes, indices = ler_off(CAMINHO)
 minimo,maximo = posicoes.min(axis=0), posicoes.max(axis=0)
 centro = (minimo + maximo)/2
 escala = 1/(maximo[1]-minimo[1])*1.8
-M_enq = (glm.scale(glm.mat4(1.0),glm.vec3(escala)) * glm.translate(glm.mat4(1.0),glm.vec3(*(-centro))))
+M_enq = (glm.scale(glm.mat4(1.0),glm.vec3(escala)) * glm.translate(glm.mat4(1.0),glm.vec3(-minimo[0],-minimo[1],-centro[2])))
 
 tri_pos = posicoes[indices]
 n_face = np.cross(tri_pos[:, 1] - tri_pos[:, 0], tri_pos[:, 2] - tri_pos[:, 1])
