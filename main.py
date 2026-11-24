@@ -16,6 +16,7 @@ CAMINHO = Path(__file__).parent / "modelos" / "torre.off"
 TITULO_JANELA = "Maix que um Circuito"
 LADO = 700
 FUNDO = (0.10, 0.11, 0.13, 1.0)
+INTERVALO_FPS = 0.25
 VERSAO_OPENGL = (4, 0)
 AMOSTRAS_MSAA = 4
 ALTURA_ALVO_MODELO = 1.8
@@ -32,10 +33,13 @@ class EstadoMouse:
 
 @dataclass
 class EstadoCTX:
-    """Armazena o estado do contexto geral da janela e do opengl."""
+    """Armazena o estado do contexto geral da janela e do OpenGL."""
 
-    vsync : bool = True
-
+    vsync: bool = True
+    cull_face: bool = True
+    fps: float = 0.0
+    frames: int = 0
+    tempo_acum: float = 0.0
 
 
 def main() -> None:
@@ -55,17 +59,17 @@ def main() -> None:
         glfw.terminate()
         raise RuntimeError("Não foi possível criar a janela GLFW.")
 
+    estado_mouse = EstadoMouse()
+    estado_ctx = EstadoCTX()
+
     glfw.make_context_current(janela)
-    glfw.swap_interval(EstadoCTX.vsync)
+    glfw.swap_interval(int(estado_ctx.vsync))
 
     ctx = moderngl.create_context()
     ctx.enable(moderngl.DEPTH_TEST)
     ctx.enable(moderngl.CULL_FACE)
 
     cam = camera.Camera()
-    estado_mouse = EstadoMouse()
-
-
     dados,  m_enq = geo.carregar_off(CAMINHO)
 
     prog = ctx.program(
@@ -74,6 +78,16 @@ def main() -> None:
     )
     vbo_torre = ctx.buffer(dados.tobytes())
     vao_torre = ctx.vertex_array(prog, [(vbo_torre, "3f 3f 2x4", "vPosition", "vNorm")])
+
+    def atualizar_titulo() -> None:
+        vsync_txt = "ON" if estado_ctx.vsync else "OFF"
+        cull_txt = "ON" if estado_ctx.cull_face else "OFF"
+        cam_txt = getattr(cam, "modo", "?")
+        titulo = (
+            f"{TITULO_JANELA} | {estado_ctx.fps:6.1f} FPS"
+            f" | VSync: {vsync_txt} | Câm: {cam_txt} | Cull: {cull_txt}"
+        )
+        glfw.set_window_title(janela, titulo)
 
     def redimensionar(_window: Any, largura: int, altura: int) -> None:
         largura_segura = max(1, largura)
@@ -94,13 +108,21 @@ def main() -> None:
             glfw.set_window_should_close(window, True)
         elif key == glfw.KEY_C:
             ctx.disable(moderngl.CULL_FACE)
+            estado_ctx.cull_face = False
+            atualizar_titulo()
         elif key == glfw.KEY_V:
             ctx.enable(moderngl.CULL_FACE)
+            estado_ctx.cull_face = True
+            atualizar_titulo()
         elif key == glfw.KEY_T:
             cam.alternar_modo()
+            atualizar_titulo()
         elif key == glfw.KEY_Y:
-            EstadoCTX.vsync = not EstadoCTX.vsync
-            glfw.swap_interval(EstadoCTX.vsync)
+            estado_ctx.vsync = not estado_ctx.vsync
+            glfw.swap_interval(int(estado_ctx.vsync))
+            estado_ctx.frames = 0
+            estado_ctx.tempo_acum = 0.0
+            atualizar_titulo()
 
     def mouse(_window: Any, button: int, action: int, _mods: int) -> None:
         if button != glfw.MOUSE_BUTTON_RIGHT:
@@ -134,13 +156,23 @@ def main() -> None:
     glfw.set_framebuffer_size_callback(janela, redimensionar)
     redimensionar(janela, *glfw.get_framebuffer_size(janela))
 
+    atualizar_titulo()
     t_ant = glfw.get_time()
 
     while not glfw.window_should_close(janela):
         ctx.clear(*FUNDO)
         agora = glfw.get_time()
-        dt = min(DT_MAX, agora - t_ant)
+        dt_real = agora - t_ant
         t_ant = agora
+        dt = min(DT_MAX, dt_real)
+
+        estado_ctx.frames += 1
+        estado_ctx.tempo_acum += dt_real
+        if estado_ctx.tempo_acum >= INTERVALO_FPS:
+            estado_ctx.fps = estado_ctx.frames / estado_ctx.tempo_acum
+            estado_ctx.frames = 0
+            estado_ctx.tempo_acum = 0.0
+            atualizar_titulo()
 
         avancar = float(glfw.get_key(janela, glfw.KEY_W) == glfw.PRESS) - float(
             glfw.get_key(janela, glfw.KEY_S) == glfw.PRESS
