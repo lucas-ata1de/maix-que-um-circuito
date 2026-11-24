@@ -103,8 +103,9 @@ def main() -> None:
         cull_txt = "ON" if estado_ctx.cull_face else "OFF"
         cam_txt = getattr(cam, "modo", "?")
         titulo = (
+
             f"{TITULO_JANELA} | {estado_ctx.fps:6.1f} FPS"
-            f" | VSync: {vsync_txt} | Câm: {cam_txt} | Cull: {cull_txt}"
+            f" | VSync: {vsync_txt} | Corte Atual: {estado_jogo.tam_corte_atual / estado_jogo.graph.m:.0%} Meta: {estado_jogo.meta / estado_jogo.graph.m:.0%} | {estado_jogo.tempo_restante:4.1f}s"
         )
         glfw.set_window_title(janela, titulo)
 
@@ -142,6 +143,12 @@ def main() -> None:
             estado_ctx.frames = 0
             estado_ctx.tempo_acum = 0.0
             atualizar_titulo()
+        elif key == glfw.KEY_ENTER and estado_jogo.estado == "START":
+            estado_jogo.estado = "PLAYING"
+        elif key == glfw.KEY_P and estado_jogo.estado in ("PAUSED","PLAYING"):
+            estado_jogo.estado = "PAUSED" if estado_jogo.estado == "PLAYING" else "PLAYING"
+        elif key == glfw.KEY_R:
+            estado_jogo.iniciar_fase(estado_jogo.n)
 
     def mouse(_window: Any, button: int, action: int, _mods: int) -> None:
         if button != glfw.MOUSE_BUTTON_RIGHT:
@@ -204,11 +211,25 @@ def main() -> None:
         )
 
         cam.mover(avancar, lateral, dt, vertical)
-        prog["u_modelo"].write(m_enq.to_bytes())
+        estado_jogo.atualizar(dt)
+        
+        #projeto e renderiza a camera
         prog["u_visao"].write(cam.visao().to_bytes())
         prog["u_projecao"].write(cam.projecao().to_bytes())
+        prog["u_modelo"].write(I.to_bytes())
+        vao_piso.render(moderngl.TRIANGLES)
 
-        vao_torre.render(moderngl.TRIANGLES)
+        #projeto e renderiza cubicos
+        for m_borda in bordas:
+            prog["u_modelo"].write(m_borda.to_bytes())
+            vao_cubo.render(moderngl.TRIANGLES)
+
+        #projeto e renderiza torres
+        for x, y, z in estado_jogo.posicoes:
+            m_torre = glm.translate(I, glm.vec3(x, y, z)) * m_enq
+            prog["u_modelo"].write(m_torre.to_bytes())
+            vao_torre.render(moderngl.TRIANGLES)
+
 
         glfw.swap_buffers(janela)
         glfw.poll_events()

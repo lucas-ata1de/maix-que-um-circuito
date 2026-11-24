@@ -5,7 +5,7 @@ import random
 class EstadoJogo:
     """Armazena estado atual do jogo, o grafo ,corte atual etc"""
     n: int = 0 
-    def __init__(self,n: int =8,meio_lado : float =12,dist_min: float = 2.2):
+    def __init__(self,n: int =10,meio_lado : float =12,dist_min: float = 1.2):
         self.meio_lado = meio_lado
         self.n = n
         self.dist_min = dist_min
@@ -22,6 +22,21 @@ class EstadoJogo:
             grafo.sorteia_ate_meioaprox(self.graph)
             self.tam_corte_atual = grafo.conta_do_corte(self.graph)
             self.meta = grafo.acha_opt(self.graph)
+
+    def inverter_torre(self, u: int) -> None:
+        if self.estado != "PLAYING":
+            return
+        self.graph.troca_xi(u)
+        self.tam_corte_atual = grafo.conta_do_corte(self.graph)
+        if self.tam_corte_atual >= self.meta:
+            self.estado = "VICTORY"
+
+    def atualizar(self, dt: float) -> None:
+        if self.estado != "PLAYING":
+            return
+        self.tempo_restante = max(0.0, self.tempo_restante - dt)
+        if self.tempo_restante <= 0.0:
+            self.estado = "GAME_OVER"
 
 
 
@@ -46,20 +61,5 @@ def sortear_posicoes(n, meio_lado, dist_min):
             if tentativas > 300:
                 dist_min *= 0.9
                 tentativas = 0
-        return lista
-
-def inverter_torre(self, u: int) -> None:
-    if self.estado != "PLAYING":
-            return
-    self.graph.troca_xi(u)
-    self.tam_corte_atual = grafo.conta_do_corte(self.graph)
-    if self.tam_corte_atual >= self.meta:
-        self.estado = "VICTORY"
-
-def atualizar(self, dt: float) -> None:
-    if self.estado != "PLAYING":
-        return
-    self.tempo_restante = max(0.0, self.tempo_restante - dt)
-    if self.tempo_restante <= 0.0:
-        self.estado = "GAME_OVER"
+    return lista
 
