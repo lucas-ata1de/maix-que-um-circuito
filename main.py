@@ -10,6 +10,9 @@ Controles de Teclado:
     T                   Alternar modo de camera ('livre' <-> 'aerea')
     1                   Ligar / desligar luz direcional
     2                   Ligar / desligar luz pontual movel (orbitante)
+    3                   Ligar / desligar luz de todos os choques (torres + arestas)
+    4                   Ligar / desligar apenas luz dos choques das torres
+    5                   Ligar / desligar apenas luz dos choques entre torres
     Y                   Ligar / desligar VSync (FPS exibido na barra de titulo)
     C / V               Desativar / ativar descarte de faces traseiras (CULL_FACE)
     Enter               Iniciar partida (a partir do estado START)
@@ -18,7 +21,7 @@ Controles de Teclado:
     Esc                 Fechar janela
 
 Controles de Mouse:
-    Botao Esquerdo (clique)    Inverte o lado do corte da torre sob o cursor
+    Botao Esquerdo (clique)    Selecionar torre por raycasting e inverter particao
     Botao Direito + Arrastar   Girar orientacao da camera (yaw/pitch no modo livre)
     Roda do Mouse (Scroll)     Zoom (aproximar/afastar nos modos livre e aereo)
 """
@@ -37,9 +40,12 @@ import geometria as geo
 import jogo
 from material import (
     CenaLuzes,
+    ConfigLuzesChoque,
+    LuzChoqueAresta,
+    LuzChoqueTorre,
     LuzDirecional,
     LuzPontual,
-    MAT_PEDESTAL,
+    MAT_BORDA,
     MAT_PISO,
     MAT_TORRE_A,
     MAT_TORRE_B,
@@ -53,18 +59,18 @@ TEXTURAS = RAIZ / "texturas"
 CAMINHO_TORRE = RAIZ / "modelos" / "torre.off"
 
 TITULO_JANELA = "Maix que um Circuito"
-LADO = 900
+LADO = 700
 FUNDO = (0.10, 0.11, 0.13, 1.0)
 INTERVALO_FPS = 0.25
 VERSAO_OPENGL = (4, 0)
 AMOSTRAS_MSAA = 4
-ALTURA_ALVO_MODELO = 4
+ALTURA_ALVO_MODELO = 1.8
+ALTURA_LUZ_TORRE = ALTURA_ALVO_MODELO + 0.25
 DT_MAX = 0.05
 RAIO_CAMERA = 0.5
 MEIA_LARG_TORRE = 0.25 * ALTURA_ALVO_MODELO  # caixa da torre: usada no clique e na colisao
 ALTURA_CAIXA_TORRE = ALTURA_ALVO_MODELO + 0.1
 
-# Cores das primitivas de linha convertidas uma unica vez de sRGB para espaco linear
 COR_COROA_A = srgb_para_linear((0.15, 0.55, 1.00))
 COR_COROA_B = srgb_para_linear((1.00, 0.20, 0.25))
 COR_ARESTA_CORTE = srgb_para_linear((1.00, 0.90, 0.10))
@@ -87,6 +93,9 @@ def retangulo(x: float, y: float, largura: float, altura: float) -> glm.mat4:
         glm.mat4(1.0), glm.vec3(largura, altura, 1.0)
     )
 
+LUZ_CHOQUE_TORRE_A = glm.vec3(0.40, 1.00, 2.25)
+LUZ_CHOQUE_TORRE_B = glm.vec3(1.75, 0.36, 0.38)
+
 
 @dataclass
 class EstadoMouse:
@@ -106,6 +115,54 @@ class EstadoCTX:
     fps: float = 0.0
     frames: int = 0
     tempo_acum: float = 0.0
+
+
+def _atualizar_luzes_choque(
+    estado_jogo: jogo.EstadoJogo,
+    choques: ConfigLuzesChoque,
+    tempo_anim: float,
+) -> None:
+    """Sincroniza as luzes emitidas pelas coroas das torres e arestas eletricas."""
+    choques.torres.clear()
+    if choques.torres_ativas:
+        for u, (x, y, z) in enumerate(estado_jogo.posicoes):
+            flicker = 0.90 + 0.10 * math.sin(tempo_anim * 7.5 + u * 1.9)
+            cor_base = (
+                LUZ_CHOQUE_TORRE_A
+                if estado_jogo.graph.X[u] == 0
+                else LUZ_CHOQUE_TORRE_B
+            )
+            choques.torres.append(
+                LuzChoqueTorre(
+                    posicao=glm.vec3(x, y + ALTURA_LUZ_TORRE, z),
+                    cor=cor_base * flicker,
+                )
+            )
+
+    choques.arestas.clear()
+    if choques.arestas_ativas:
+        for u in range(estado_jogo.n):
+            ax, ay, az = estado_jogo.posicoes[u]
+            p_a = glm.vec3(ax, ay + ALTURA_ALVO_MODELO, az)
+            for v in estado_jogo.graph.adj[u]:
+                if u >= v:
+                    continue
+                bx, by, bz = estado_jogo.posicoes[v]
+                p_b = glm.vec3(bx, by + ALTURA_ALVO_MODELO, bz)
+                no_corte = estado_jogo.graph.ta_no_corte(u, v)
+                vel = 16.0 if no_corte else 5.0
+                amp_f = 0.15 if no_corte else 0.06
+                intens = (1.0 - amp_f) + amp_f * math.sin(
+                    tempo_anim * vel + float(u * 17 + v)
+                )
+                choques.arestas.append(
+                    LuzChoqueAresta(
+                        ponto_a=p_a,
+                        ponto_b=p_b,
+                        no_corte=no_corte,
+                        intensidade=intens,
+                    )
+                )
 
 
 def main() -> None:
@@ -139,33 +196,34 @@ def main() -> None:
 
     cam = camera.Camera(pos=(0.0, 9.0, 11.0), altura_aerea=28.0)
 
-    # Camada grafica desacoplada (fachada unica)
     renderizador = Renderizador(
         ctx,
         pasta_shaders=SHADERS,
         usar_framebuffer_srgb=True,
     )
-    renderizador.carregar_textura("piso", TEXTURAS / "piso_circuito.png", repetir=True)
+    renderizador.carregar_textura(
+        "piso",
+        TEXTURAS / "rubber_tiles_diff_1k.jpg",
+        repetir=True,
+    )
     renderizador.carregar_textura(
         "metal_torre",
-        TEXTURAS / "metal_torre.png",
+        TEXTURAS / "rusty_metal_04_diff_1k.jpg",
+        repetir=True,
+    )
+    renderizador.carregar_textura(
+        "borda",
+        TEXTURAS / "white_stucco_02_diff_1k.jpg",
         repetir=True,
     )
 
-    luz_movel = LuzPontual(
-        posicao=glm.vec3(8.0, 4.0, 0.0),
-        cor=glm.vec3(1.80, 1.40, 0.85),
-        fator_amb=0.08,
-        kc=1.0,
-        kl=0.05,
-        kq=0.012,
-    )
+    luz_movel = LuzPontual(posicao=glm.vec3(8.0, 4.5, 0.0))
     cena_luzes = CenaLuzes(
         direcional=LuzDirecional(),
         pontuais=[luz_movel],
+        choques=ConfigLuzesChoque(),
     )
 
-    # VBOs e IBO criados uma unica vez na inicializacao
     dados_torre, indices_torre, m_enq = geo.carregar_off(
         CAMINHO_TORRE,
         altura_alvo=ALTURA_ALVO_MODELO,
@@ -181,17 +239,17 @@ def main() -> None:
 
     L = float(estado_jogo.meio_lado)
     I = glm.mat4(1.0)
+    rot_y90 = glm.rotate(I, math.pi / 2.0, glm.vec3(0.0, 1.0, 0.0))
 
-    # Barreiras da arena construidas com escala nao uniforme a partir do cubo unitario
-    # (evidenciam a Matriz Normal e a textura branca 1x1 Null Object)
     bordas = [
         glm.translate(I, glm.vec3(0.0, 0.2,  L)) * glm.scale(I, glm.vec3(2 * L + 0.4, 0.4, 0.4)),
         glm.translate(I, glm.vec3(0.0, 0.2, -L)) * glm.scale(I, glm.vec3(2 * L + 0.4, 0.4, 0.4)),
-        glm.translate(I, glm.vec3( L, 0.2, 0.0)) * glm.scale(I, glm.vec3(0.4, 0.4, 2 * L - 0.4)),
-        glm.translate(I, glm.vec3(-L, 0.2, 0.0)) * glm.scale(I, glm.vec3(0.4, 0.4, 2 * L - 0.4)),
+        glm.translate(I, glm.vec3( L, 0.2, 0.0)) * rot_y90 * glm.scale(I, glm.vec3(2 * L - 0.4, 0.4, 0.4)),
+        glm.translate(I, glm.vec3(-L, 0.2, 0.0)) * rot_y90 * glm.scale(I, glm.vec3(2 * L - 0.4, 0.4, 0.4)),
     ]
 
     def atualizar_titulo() -> None:
+        """Atualiza a barra de titulo com FPS, estados graficos e progresso da partida."""
         if estado_jogo.estado == "GAME_OVER":
             glfw.set_window_title(janela, "GAME OVER, tente novamente aperte R")
             return
@@ -205,11 +263,20 @@ def main() -> None:
         cull_txt = "ON" if estado_ctx.cull_face else "OFF"
         l1_txt = "ON" if cena_luzes.direcional.ativa else "OFF"
         l2_txt = "ON" if luz_movel.ativa else "OFF"
+        ch = cena_luzes.choques
+        if ch.torres_ativas and ch.arestas_ativas:
+            l3_txt = "ON"
+        elif ch.torres_ativas:
+            l3_txt = "TORRE"
+        elif ch.arestas_ativas:
+            l3_txt = "ARESTA"
+        else:
+            l3_txt = "OFF"
         m_arestas = max(1, estado_jogo.graph.m)
         titulo = (
             f"{TITULO_JANELA} | {estado_ctx.fps:6.1f} FPS"
             f" | VSync:{vsync_txt} | Cam:{cam.modo} | Cull:{cull_txt}"
-            f" | L1:{l1_txt} L2:{l2_txt} | {estado_jogo.estado}"
+            f" | L1:{l1_txt} L2:{l2_txt} Choque:{l3_txt} | {estado_jogo.estado}"
             f" | Corte:{estado_jogo.tam_corte_atual / m_arestas:.0%}"
             f" Meta:{estado_jogo.meta / m_arestas:.0%}"
             f" | {estado_jogo.tempo_restante:4.1f}s"
@@ -217,6 +284,7 @@ def main() -> None:
         glfw.set_window_title(janela, titulo)
 
     def redimensionar(_window: Any, largura: int, altura: int) -> None:
+        """Ajusta o viewport e a razao de aspecto ao redimensionar a janela."""
         largura_segura = max(1, largura)
         altura_segura = max(1, altura)
         ctx.viewport = (0, 0, largura_segura, altura_segura)
@@ -229,6 +297,7 @@ def main() -> None:
         action: int,
         _mods: int,
     ) -> None:
+        """Trata acoes discretas do teclado (luzes, camera, pausa, reinicio e vsync)."""
         if action != glfw.PRESS:
             return
         if key == glfw.KEY_ESCAPE:
@@ -238,6 +307,15 @@ def main() -> None:
             atualizar_titulo()
         elif key == glfw.KEY_2:
             luz_movel.ativa = not luz_movel.ativa
+            atualizar_titulo()
+        elif key == glfw.KEY_3:
+            cena_luzes.choques.alternar_todos()
+            atualizar_titulo()
+        elif key == glfw.KEY_4:
+            cena_luzes.choques.torres_ativas = not cena_luzes.choques.torres_ativas
+            atualizar_titulo()
+        elif key == glfw.KEY_5:
+            cena_luzes.choques.arestas_ativas = not cena_luzes.choques.arestas_ativas
             atualizar_titulo()
         elif key == glfw.KEY_C:
             ctx.disable(moderngl.CULL_FACE)
@@ -267,13 +345,17 @@ def main() -> None:
             atualizar_titulo()
 
     def mouse(window: Any, button: int, action: int, _mods: int) -> None:
+        """Trata selecao de torre (botao esquerdo) e inicio/fim de giro (botao direito)."""
         if button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS:
             mx, my = glfw.get_cursor_pos(window)
             w, h = glfw.get_window_size(window)
             origem, direcao = cam.raio(mx, my, w, h)
-            u = estado_jogo.torre_no_raio(origem, direcao,
-                                          meia_larg=MEIA_LARG_TORRE,
-                                          altura=ALTURA_CAIXA_TORRE)
+            u = estado_jogo.torre_no_raio(
+                origem,
+                direcao,
+                meia_larg=MEIA_LARG_TORRE,
+                altura=ALTURA_CAIXA_TORRE,
+            )
             if u is not None:
                 estado_jogo.inverter_torre(u)
                 atualizar_titulo()
@@ -290,6 +372,7 @@ def main() -> None:
             estado_mouse.ultimo_y = None
 
     def cursor(_window: Any, xpos: float, ypos: float) -> None:
+        """Atualiza yaw e pitch da camera enquanto o botao direito e arrastado."""
         if not estado_mouse.girando:
             return
         if estado_mouse.ultimo_x is not None and estado_mouse.ultimo_y is not None:
@@ -300,6 +383,7 @@ def main() -> None:
         estado_mouse.ultimo_y = ypos
 
     def scroll(_window: Any, _xoffset: float, yoffset: float) -> None:
+        """Aproxima ou afasta a camera conforme a rolagem do mouse."""
         cam.zoom(yoffset)
         cam.pos = estado_jogo.empurrar_esfera(cam.pos, RAIO_CAMERA, MEIA_LARG_TORRE, ALTURA_CAIXA_TORRE)
 
@@ -322,11 +406,11 @@ def main() -> None:
             t_ant = agora
             dt = min(DT_MAX, dt_real)
 
-            if estado_jogo.estado not in ("PAUSED", "GAME_OVER"):
+            if estado_jogo.estado != "PAUSED":
                 tempo_anim += dt
                 luz_movel.posicao = glm.vec3(
                     raio_orbita * math.cos(tempo_anim * 0.8),
-                    4.0 + 0.6 * math.sin(tempo_anim * 1.6),
+                    4.5 + 0.6 * math.sin(tempo_anim * 1.6),
                     raio_orbita * math.sin(tempo_anim * 0.8),
                 )
 
@@ -356,6 +440,8 @@ def main() -> None:
             cam.pos = estado_jogo.empurrar_esfera(cam.pos, RAIO_CAMERA, MEIA_LARG_TORRE, ALTURA_CAIXA_TORRE)
             estado_jogo.atualizar(dt)
 
+            _atualizar_luzes_choque(estado_jogo, cena_luzes.choques, tempo_anim)
+
             V = cam.visao()
             P = cam.projecao()
 
@@ -365,56 +451,71 @@ def main() -> None:
             renderizador.desenhar_objeto(vbo_piso, MAT_PISO, I)
 
             for m_borda in bordas:
-                renderizador.desenhar_objeto(vbo_cubo, MAT_PEDESTAL, m_borda)
+                renderizador.desenhar_objeto(vbo_cubo, MAT_BORDA, m_borda)
 
             for u, (x, y, z) in enumerate(estado_jogo.posicoes):
                 m_torre = glm.translate(I, glm.vec3(x, y, z)) * m_enq
                 mat_torre = MAT_TORRE_A if estado_jogo.graph.X[u] == 0 else MAT_TORRE_B
                 renderizador.desenhar_objeto(vbo_torre, mat_torre, m_torre, ibo=ibo_torre)
 
+            alguma_luz_global = cena_luzes.direcional.ativa or luz_movel.ativa
+            choques = cena_luzes.choques
+            escala_coroa = 1.0 if choques.torres_ativas else (0.14 if alguma_luz_global else 0.0)
+            escala_aresta = 1.0 if choques.arestas_ativas else (0.14 if alguma_luz_global else 0.0)
+
             renderizador.iniciar_linhas_3d(V, P, tempo=tempo_anim)
 
-            for u, (x, y, z) in enumerate(estado_jogo.posicoes):
-                cor_coroa = COR_COROA_A if estado_jogo.graph.X[u] == 0 else COR_COROA_B
-                m_onda = (
-                    glm.translate(I, glm.vec3(x, y + ALTURA_ALVO_MODELO, z))
-                    * glm.rotate(I, tempo_anim * 2.2 + u * 0.7, glm.vec3(0.0, 1.0, 0.0))
-                )
-                renderizador.desenhar_linha(
-                    vbo_onda,
-                    m_onda,
-                    cor_coroa,
-                    modo=moderngl.LINE_LOOP,
-                )
-
-            for u in range(estado_jogo.n):
-                ax, ay, az = estado_jogo.posicoes[u]
-                p_a = glm.vec3(ax, ay + ALTURA_ALVO_MODELO, az)
-                for v in estado_jogo.graph.adj[u]:
-                    if u >= v:
-                        continue
-                    bx, by, bz = estado_jogo.posicoes[v]
-                    delta = glm.vec3(bx, by + ALTURA_ALVO_MODELO, bz) - p_a
-                    comp = glm.length(delta)
-                    if comp < 1e-5:
-                        continue
-                    m_aresta = (
-                        glm.translate(I, p_a)
-                        * glm.rotate(I, math.atan2(delta.x, delta.z), glm.vec3(0.0, 1.0, 0.0))
-                        * glm.scale(I, glm.vec3(1.0, 1.0, comp))
+            if escala_coroa > 0.0:
+                for u, (x, y, z) in enumerate(estado_jogo.posicoes):
+                    cor_coroa = (
+                        COR_COROA_A if estado_jogo.graph.X[u] == 0 else COR_COROA_B
+                    ) * escala_coroa
+                    m_onda = (
+                        glm.translate(I, glm.vec3(x, y + ALTURA_ALVO_MODELO, z))
+                        * glm.rotate(
+                            I,
+                            tempo_anim * 2.2 + u * 0.7 if choques.torres_ativas else 0.0,
+                            glm.vec3(0.0, 1.0, 0.0),
+                        )
                     )
-                    no_corte = estado_jogo.graph.ta_no_corte(u, v)
                     renderizador.desenhar_linha(
-                        vbo_aresta,
-                        m_aresta,
-                        COR_ARESTA_CORTE if no_corte else COR_ARESTA_FORA,
-                        modo=moderngl.LINE_STRIP,
-                        amp=0.12 if no_corte else 0.03,
-                        vel=18.0 if no_corte else 5.0,
-                        seed=float(u * 17 + v),
+                        vbo_onda,
+                        m_onda,
+                        cor_coroa,
+                        modo=moderngl.LINE_LOOP,
                     )
 
-            # ---- placar: 2a passada, ortografica em pixels e sem teste de profundidade ----
+            if escala_aresta > 0.0:
+                for u in range(estado_jogo.n):
+                    ax, ay, az = estado_jogo.posicoes[u]
+                    p_a = glm.vec3(ax, ay + ALTURA_ALVO_MODELO, az)
+                    for v in estado_jogo.graph.adj[u]:
+                        if u >= v:
+                            continue
+                        bx, by, bz = estado_jogo.posicoes[v]
+                        delta = glm.vec3(bx, by + ALTURA_ALVO_MODELO, bz) - p_a
+                        comp = glm.length(delta)
+                        if comp < 1e-5:
+                            continue
+                        m_aresta = (
+                            glm.translate(I, p_a)
+                            * glm.rotate(I, math.atan2(delta.x, delta.z), glm.vec3(0.0, 1.0, 0.0))
+                            * glm.scale(I, glm.vec3(1.0, 1.0, comp))
+                        )
+                        no_corte = estado_jogo.graph.ta_no_corte(u, v)
+                        cor_aresta = (
+                            COR_ARESTA_CORTE if no_corte else COR_ARESTA_FORA
+                        ) * escala_aresta
+                        renderizador.desenhar_linha(
+                            vbo_aresta,
+                            m_aresta,
+                            cor_aresta,
+                            modo=moderngl.LINE_STRIP,
+                            amp=(0.12 if no_corte else 0.03) if choques.arestas_ativas else 0.0,
+                            vel=(18.0 if no_corte else 5.0) if choques.arestas_ativas else 0.0,
+                            seed=float(u * 17 + v),
+                        )
+
             larg_tela, alt_tela = glfw.get_framebuffer_size(janela)
             renderizador.iniciar_placar_2d(larg_tela, alt_tela)
 
@@ -437,7 +538,6 @@ def main() -> None:
                 renderizador.desenhar_placar_2d(vbo_quad, cheio, cor, moderngl.TRIANGLE_FAN)
                 renderizador.desenhar_placar_2d(vbo_quad, barra, COR_PLACAR_MOLDURA, moderngl.LINE_LOOP)
 
-            # marca da meta: risco vertical um pouco mais alto que a barra do corte
             x_meta = x + PLACAR_LARGURA * frac_meta
             marca = retangulo(x_meta - 1.5, y_corte - 4.0, 3.0, PLACAR_ALTURA + 8.0)
             renderizador.desenhar_placar_2d(vbo_quad, marca, COR_PLACAR_META, moderngl.TRIANGLE_FAN)

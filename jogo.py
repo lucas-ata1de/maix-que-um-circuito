@@ -4,29 +4,35 @@ import grafo
 import math
 import random
 
+import grafo
+
+
 class EstadoJogo:
-    """Armazena estado atual do jogo, o grafo ,corte atual etc"""
-    n: int = 0 
-    def __init__(self,n: int =16,meio_lado : float =12,dist_min: float = 4.0):
+    """Armazena o estado atual da partida, o grafo, posições e meta de corte."""
+
+    def __init__(self, n: int = 16, meio_lado: float = 12, dist_min: float = 3.2):
+        """Configura dimensões da arena e inicia a primeira fase."""
         self.meio_lado = meio_lado
         self.n = n
         self.dist_min = dist_min
         self.iniciar_fase(n)
 
-    def iniciar_fase(self,n):
+    def iniciar_fase(self, n: int) -> None:
+        """Sorteia novas posições e um grafo cuja meta exceda o corte inicial."""
         self.meta = 0
         self.tam_corte_atual = 1
         self.tempo_total = 60.0
         self.tempo_restante = self.tempo_total
         self.estado = "START"
-        self.posicoes = sortear_posicoes(n,self.meio_lado,self.dist_min)
+        self.posicoes = sortear_posicoes(n, self.meio_lado, self.dist_min)
         while self.meta <= self.tam_corte_atual:
-            self.graph = grafo.sorteia_grafo(n,True,0.35)
+            self.graph = grafo.sorteia_grafo(n, True, 0.35)
             grafo.sorteia_ate_meioaprox(self.graph)
             self.tam_corte_atual = grafo.conta_do_corte(self.graph)
             self.meta = grafo.acha_opt(self.graph)
 
     def inverter_torre(self, u: int) -> None:
+        """Alterna a partição da torre u e verifica condição de vitória."""
         if self.estado != "PLAYING":
             return
         self.graph.troca_xi(u)
@@ -35,18 +41,24 @@ class EstadoJogo:
             self.estado = "VICTORY"
 
     def atualizar(self, dt: float) -> None:
+        """Decrementa o cronômetro durante o jogo e verifica fim por tempo."""
         if self.estado != "PLAYING":
             return
         self.tempo_restante = max(0.0, self.tempo_restante - dt)
         if self.tempo_restante <= 0.0:
             self.estado = "GAME_OVER"
 
-    def torre_no_raio(self, o, d, meia_larg: float = 0.45, altura: float = 4) -> int | None:
+    def torre_no_raio(self, o, d, meia_larg: float = 0.45, altura: float = 1.9) -> int | None:
+        """Retorna o índice da torre mais próxima interceptada pelo raio (o, d)."""
         melhor, melhor_t = None, math.inf
         for u, (x, y, z) in enumerate(self.posicoes):
-            t = raio_aabb(o, d, (x - meia_larg, y, z - meia_larg),
-                                (x + meia_larg, y + altura, z + meia_larg))
-            if t is not None and t < melhor_t:     # a mais próxima da câmera
+            t = raio_aabb(
+                o,
+                d,
+                (x - meia_larg, y, z - meia_larg),
+                (x + meia_larg, y + altura, z + meia_larg),
+            )
+            if t is not None and t < melhor_t:
                 melhor, melhor_t = u, t
         return melhor
 
@@ -63,10 +75,10 @@ class EstadoJogo:
 
 
 def raio_aabb(o, d, bmin, bmax) -> float | None:
-    """Método das faixas (slabs): t em que o raio o + t*d entra na caixa, ou None."""
+    """Calcula a entrada t do raio o + t*d na AABB [bmin, bmax] pelo método das faixas."""
     t_entra, t_sai = 0.0, math.inf
-    for i in range(3):                       # eixos x, y, z
-        if abs(d[i]) < 1e-9:                 # raio paralelo a esse par de planos
+    for i in range(3):
+        if abs(d[i]) < 1e-9:
             if not (bmin[i] <= o[i] <= bmax[i]):
                 return None
             continue
@@ -81,16 +93,17 @@ def raio_aabb(o, d, bmin, bmax) -> float | None:
     return t_entra
 
 
+def distquad(x0, y0, z0, x, y, z):
+    """Retorna a distância euclidiana ao quadrado entre dois pontos 3D."""
+    return (x0 - x) ** 2 + (y0 - y) ** 2 + (z0 - z) ** 2
 
-
-def distquad(x0,y0,z0,x,y,z):
-    return (x0-x)**2 + (y0-y)**2 + (z0-z)**2;
 
 def sortear_posicoes(n, meio_lado, dist_min):
+    """Sorteia n posições no plano y = 0 respeitando margem e distância mínima."""
     lista = []
     margem = 2.0
     limite = meio_lado - margem
-    tentativas=0
+    tentativas = 0
     while len(lista) < n:
         x = random.uniform(-limite, limite)
         z = random.uniform(-limite, limite)
@@ -103,4 +116,3 @@ def sortear_posicoes(n, meio_lado, dist_min):
                 dist_min *= 0.9
                 tentativas = 0
     return lista
-

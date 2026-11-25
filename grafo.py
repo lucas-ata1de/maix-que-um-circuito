@@ -16,6 +16,7 @@ class Graph:
         m: int = 0,
         X: list[int] | None = None,
     ) -> None:
+        """Inicializa um grafo com n vértices e partição binária opcional."""
         self.n: int = n
         self.m: int = m
         self.adj: list[list[int]] = [[] for _ in range(n)]
@@ -82,13 +83,13 @@ def sorteia_postes(n: int) -> list[int]:
 
 
 def conta_do_corte(grafo: Graph) -> int:
-    """Conta quantas arestas atravessam o corte definido pela partição atual."""
+    """Conta quantas arestas não-direcionadas atravessam o corte atual."""
     qtd = 0
     for i in range(grafo.n):
         for j in grafo.adj[i]:
             if grafo.ta_no_corte(i, j):
                 qtd += 1
-    return qtd // 2  # cada aresta é contada duas vezes (lema do aperto de mãos)
+    return qtd // 2
 
 
 def sorteia_ate_meioaprox(grafo: Graph) -> Graph:

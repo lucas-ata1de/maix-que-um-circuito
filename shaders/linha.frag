@@ -1,7 +1,8 @@
 #version 400 core
+// Cor solida em espaco linear com codificacao sRGB opcional para linhas e placar.
 
-uniform vec4 u_cor;            // cor em espaco linear (RGBA)
-uniform int u_codificar_srgb;  // 0 = GL_FRAMEBUFFER_SRGB; 1 = codifica aqui
+uniform vec4 u_cor;
+uniform int u_codificar_srgb;
 
 out vec4 frag_color;
 

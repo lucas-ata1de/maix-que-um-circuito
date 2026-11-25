@@ -9,15 +9,13 @@ import malha
 
 
 def criar_piso(meio_lado: float = 12.0, rep: float = 12.0) -> np.ndarray:
-    """Plano em y = 0 com normal +Y e UVs repetidas (formato '3f 3f 2f')."""
+    """Plano em y = 0 (dois triangulos CCW vistos de cima) com UVs repetidas ('3f 3f 2f')."""
     L = float(meio_lado)
     R = float(rep)
     verts = [
-        # Triangulo 1 (CCW visto de cima)
         (-L, 0.0, -L, 0.0, 1.0, 0.0, 0.0, R),
         (-L, 0.0,  L, 0.0, 1.0, 0.0, 0.0, 0.0),
         ( L, 0.0,  L, 0.0, 1.0, 0.0, R,   0.0),
-        # Triangulo 2 (CCW visto de cima)
         (-L, 0.0, -L, 0.0, 1.0, 0.0, 0.0, R),
         ( L, 0.0,  L, 0.0, 1.0, 0.0, R,   0.0),
         ( L, 0.0, -L, 0.0, 1.0, 0.0, R,   R),
@@ -26,18 +24,15 @@ def criar_piso(meio_lado: float = 12.0, rep: float = 12.0) -> np.ndarray:
 
 
 def criar_cubo() -> np.ndarray:
-    """
-    Cubo unitario [-0.5, 0.5]^3 com normal por face e UV 0..1 ('3f 3f 2f').
-    (normal, [p0, p1, p2, p3] em sentido anti-horario visto de fora).
-    """
+    """Cubo unitario [-0.5, 0.5]^3 com 6 faces CCW (+Z, -Z, +X, -X, +Y, -Y) em '3f 3f 2f'."""
     h = 0.5
     faces = [
-        (( 0.0,  0.0,  1.0), [(-h, -h,  h), ( h, -h,  h), ( h,  h,  h), (-h,  h,  h)]),  # +Z
-        (( 0.0,  0.0, -1.0), [( h, -h, -h), (-h, -h, -h), (-h,  h, -h), ( h,  h, -h)]),  # -Z
-        (( 1.0,  0.0,  0.0), [( h, -h,  h), ( h, -h, -h), ( h,  h, -h), ( h,  h,  h)]),  # +X
-        ((-1.0,  0.0,  0.0), [(-h, -h, -h), (-h, -h,  h), (-h,  h,  h), (-h,  h, -h)]),  # -X
-        (( 0.0,  1.0,  0.0), [(-h,  h,  h), ( h,  h,  h), ( h,  h, -h), (-h,  h, -h)]),  # +Y
-        (( 0.0, -1.0,  0.0), [(-h, -h, -h), ( h, -h, -h), ( h, -h,  h), (-h, -h,  h)]),  # -Y
+        (( 0.0,  0.0,  1.0), [(-h, -h,  h), ( h, -h,  h), ( h,  h,  h), (-h,  h,  h)]),
+        (( 0.0,  0.0, -1.0), [( h, -h, -h), (-h, -h, -h), (-h,  h, -h), ( h,  h, -h)]),
+        (( 1.0,  0.0,  0.0), [( h, -h,  h), ( h, -h, -h), ( h,  h, -h), ( h,  h,  h)]),
+        ((-1.0,  0.0,  0.0), [(-h, -h, -h), (-h, -h,  h), (-h,  h,  h), (-h,  h, -h)]),
+        (( 0.0,  1.0,  0.0), [(-h,  h,  h), ( h,  h,  h), ( h,  h, -h), (-h,  h, -h)]),
+        (( 0.0, -1.0,  0.0), [(-h, -h, -h), ( h, -h, -h), ( h, -h,  h), (-h, -h,  h)]),
     ]
     uvs = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
 

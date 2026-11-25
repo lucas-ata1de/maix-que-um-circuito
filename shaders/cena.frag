@@ -1,4 +1,5 @@
 #version 400 core
+// Blinn-Phong no Espaco da Camera com luz direcional, pontuais e choques localizados.
 
 in vec3 v_pos_view;
 in vec3 v_normal_view;
@@ -15,30 +16,48 @@ struct Material {
 
 struct LuzDirecional {
     int ativa;
-    vec3 direcao_view;   // direcao de propagacao dos raios no Espaco da Camera
-    vec3 cor;            // intensidade RGB em espaco linear
-    float fator_amb;     // fracao ambiente (ex.: 0.22)
+    vec3 direcao_view;
+    vec3 cor;
+    float fator_amb;
 };
 
 struct LuzPontual {
     int ativa;
-    vec3 pos_view;       // posicao no Espaco da Camera
-    vec3 cor;            // intensidade RGB em espaco linear
-    float fator_amb;     // fracao ambiente (ex.: 0.08)
-    float kc;            // atenuacao constante
-    float kl;            // atenuacao linear
-    float kq;            // atenuacao quadratica
+    vec3 pos_view;
+    vec3 cor;
+    float fator_amb;
+    float kc;
+    float kl;
+    float kq;
 };
 
 #define MAX_PONTUAIS 4
+#define MAX_CHOQUES_TORRE 24
+#define MAX_CHOQUES_ARESTA 48
 
 uniform Material u_material;
 uniform sampler2D u_textura;
-uniform int u_codificar_srgb;  // 0 = usa GL_FRAMEBUFFER_SRGB; 1 = codifica no shader
+uniform int u_codificar_srgb;
 
 uniform LuzDirecional u_luz_dir;
 uniform int u_num_pontuais;
 uniform LuzPontual u_pontuais[MAX_PONTUAIS];
+
+uniform int u_choques_torre_ativos;
+uniform int u_num_choques_torre;
+uniform vec4 u_choques_torre_params;
+uniform float u_choques_torre_raio;
+uniform vec3 u_choques_torre_pos[MAX_CHOQUES_TORRE];
+uniform vec3 u_choques_torre_cor[MAX_CHOQUES_TORRE];
+
+uniform int u_choques_aresta_ativos;
+uniform int u_num_choques_aresta;
+uniform vec4 u_choques_aresta_params;
+uniform float u_choques_aresta_raio;
+uniform vec3 u_cor_choque_corte;
+uniform vec3 u_cor_choque_fora;
+uniform vec4 u_choques_aresta_a[MAX_CHOQUES_ARESTA];
+uniform vec4 u_choques_aresta_b[MAX_CHOQUES_ARESTA];
 
 vec3 avaliar_blinn_phong(
     vec3 N, vec3 V, vec3 L,
@@ -55,6 +74,16 @@ vec3 avaliar_blinn_phong(
     vec3 difuso = ndotl * kd_eff;
     vec3 especular = spec * u_material.ks;
     return cor_luz * (ambiente + difuso + especular);
+}
+
+float atenuacao_local(float d, vec3 coefs, float raio) {
+    if (d >= raio) {
+        return 0.0;
+    }
+    float u = d / max(raio, 1e-4);
+    float janela = 1.0 - u * u;
+    float denom = coefs.x + coefs.y * d + coefs.z * d * d;
+    return (janela * janela) / max(denom, 1e-6);
 }
 
 vec3 linear_para_srgb(vec3 c) {
@@ -100,6 +129,55 @@ void main() {
             u_pontuais[i].cor, u_pontuais[i].fator_amb,
             ka_eff, kd_eff
         );
+    }
+
+    if (u_choques_torre_ativos != 0) {
+        int n_t = clamp(u_num_choques_torre, 0, MAX_CHOQUES_TORRE);
+        for (int i = 0; i < n_t; ++i) {
+            vec3 delta = u_choques_torre_pos[i] - v_pos_view;
+            float d = length(delta);
+            float aten = atenuacao_local(d, u_choques_torre_params.xyz, u_choques_torre_raio);
+            if (aten <= 0.0) {
+                continue;
+            }
+            vec3 L_t = delta / max(d, 1e-6);
+            cor_total += aten * avaliar_blinn_phong(
+                N, V, L_t,
+                u_choques_torre_cor[i], u_choques_torre_params.w,
+                ka_eff, kd_eff
+            );
+        }
+    }
+
+    if (u_choques_aresta_ativos != 0) {
+        int n_a = clamp(u_num_choques_aresta, 0, MAX_CHOQUES_ARESTA);
+        for (int i = 0; i < n_a; ++i) {
+            vec3 A = u_choques_aresta_a[i].xyz;
+            vec3 B = u_choques_aresta_b[i].xyz;
+            vec3 ab = B - A;
+            float t = clamp(
+                dot(v_pos_view - A, ab) / max(dot(ab, ab), 1e-6),
+                0.0,
+                1.0
+            );
+            vec3 ponto_prox = A + t * ab;
+            vec3 delta = ponto_prox - v_pos_view;
+            float d = length(delta);
+            float aten = atenuacao_local(d, u_choques_aresta_params.xyz, u_choques_aresta_raio);
+            if (aten <= 0.0) {
+                continue;
+            }
+            vec3 L_a = delta / max(d, 1e-6);
+            vec3 cor_base = (u_choques_aresta_b[i].w > 0.5)
+                ? u_cor_choque_corte
+                : u_cor_choque_fora;
+            float intens = u_choques_aresta_a[i].w;
+            cor_total += aten * avaliar_blinn_phong(
+                N, V, L_a,
+                cor_base * intens, u_choques_aresta_params.w,
+                ka_eff, kd_eff
+            );
+        }
     }
 
     vec3 rgb = (u_codificar_srgb != 0)

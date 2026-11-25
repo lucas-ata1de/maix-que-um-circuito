@@ -1,9 +1,9 @@
 """Fachada unica de renderizacao OpenGL 4.0 Core / ModernGL.
 
 Encapsula compilacao de shaders, cache de VAOs, textura branca 1x1 (Null Object),
-calculo da Matriz Normal na CPU, conversao das fontes de luz para o Espaco da
-Camera, gerenciamento de GL_FRAMEBUFFER_SRGB e as tres passadas de desenho
-(objetos 3D, linhas 3D e placar 2D ortografico).
+calculo da Matriz Normal na CPU, conversao das fontes de luz (direcional,
+pontuais e choques eletricos de torres e arestas) para o Espaco da Camera,
+gerenciamento de GL_FRAMEBUFFER_SRGB e as tres passadas de desenho.
 """
 
 from pathlib import Path
@@ -11,12 +11,15 @@ from typing import Any, Optional
 
 import glm
 import moderngl
+import numpy as np
 
 import texturas as tex_mod
 from material import CenaLuzes, Material
 
 GL_FRAMEBUFFER_SRGB = 0x8DB9
 MAX_PONTUAIS = 4
+MAX_CHOQUES_TORRE = 24
+MAX_CHOQUES_ARESTA = 48
 
 CAMPOS_CENA: tuple[tuple[str, str], ...] = (
     ("3f", "in_position"),
@@ -35,6 +38,7 @@ class Renderizador:
         pasta_shaders: str | Path = "shaders",
         usar_framebuffer_srgb: bool = True,
     ) -> None:
+        """Compila os programas GLSL e inicializa caches internos da fachada."""
         self.ctx = ctx
         self.usar_framebuffer_srgb = usar_framebuffer_srgb
 
@@ -48,7 +52,6 @@ class Renderizador:
             fragment_shader=(pasta / "linha.frag").read_text(encoding="utf-8"),
         )
 
-        # Textura branca 1x1 (padrao Null Object: evita 'if' no fragment shader)
         self._tex_branca = ctx.texture((1, 1), 4, b"\xff\xff\xff\xff")
         self._tex_branca.filter = (moderngl.NEAREST, moderngl.NEAREST)
 
@@ -56,22 +59,28 @@ class Renderizador:
         self._vaos: dict[tuple[int, int, int], moderngl.VertexArray] = {}
         self._matriz_visao = glm.mat4(1.0)
 
-    # --- Helpers internos (seguem o padrao do Visualizador/motor/main.py) ---
+        self._buf_torre_pos = np.zeros((MAX_CHOQUES_TORRE, 3), dtype="f4")
+        self._buf_torre_cor = np.zeros((MAX_CHOQUES_TORRE, 3), dtype="f4")
+        self._buf_aresta_a = np.zeros((MAX_CHOQUES_ARESTA, 4), dtype="f4")
+        self._buf_aresta_b = np.zeros((MAX_CHOQUES_ARESTA, 4), dtype="f4")
 
     @staticmethod
     def _enviar(prog: moderngl.Program, nome: str, valor: Any) -> None:
+        """Envia um uniform ao programa GLSL somente se estiver ativo no shader."""
         if nome not in prog:
             return
         if isinstance(valor, (glm.mat3, glm.mat4)):
             prog[nome].write(valor.to_bytes())
         elif isinstance(valor, (glm.vec2, glm.vec3, glm.vec4)):
             prog[nome].value = tuple(valor)
+        elif isinstance(valor, np.ndarray):
+            prog[nome].write(np.ascontiguousarray(valor, dtype="f4").tobytes())
         else:
             prog[nome].value = valor
 
     @staticmethod
     def _matriz_normal(mv: glm.mat4) -> glm.mat3:
-        """Inversa transposta da parte linear 3x3 de V * M."""
+        """Calcula a inversa transposta da parte linear 3x3 de V * M."""
         return glm.transpose(glm.inverse(glm.mat3(mv)))
 
     def _vao_de(
@@ -81,6 +90,7 @@ class Renderizador:
         ibo: Optional[moderngl.Buffer],
         campos: tuple[tuple[str, str], ...],
     ) -> moderngl.VertexArray:
+        """Recupera ou cria em cache o VAO para a combinacao (programa, VBO, IBO)."""
         chave = (id(prog), id(vbo), id(ibo) if ibo is not None else 0)
         vao = self._vaos.get(chave)
         if vao is not None:
@@ -105,9 +115,8 @@ class Renderizador:
 
     @property
     def _flag_codificar_srgb(self) -> int:
+        """Retorna 0 quando GL_FRAMEBUFFER_SRGB esta ativo, ou 1 para codificar no shader."""
         return 0 if self.usar_framebuffer_srgb else 1
-
-    # --- Recursos e controle de quadro ---
 
     def carregar_textura(
         self,
@@ -133,15 +142,13 @@ class Renderizador:
         if self.usar_framebuffer_srgb:
             self.ctx.enable_direct(GL_FRAMEBUFFER_SRGB)
 
-    # --- Passada 1: objetos 3D iluminados e texturizados ---
-
     def iniciar_cena_3d(
         self,
         visao: glm.mat4,
         projecao: glm.mat4,
         luzes: CenaLuzes,
     ) -> None:
-        """Configura camera e luzes no Espaco da Camera (1x por quadro)."""
+        """Configura camera e todas as fontes de luz no Espaco da Camera (1x/quadro)."""
         self._matriz_visao = visao
         prog = self.prog_cena
 
@@ -150,7 +157,6 @@ class Renderizador:
         self._enviar(prog, "u_textura", 0)
         self._enviar(prog, "u_codificar_srgb", self._flag_codificar_srgb)
 
-        # Luz direcional: vetor livre -> apenas rotacao mat3(V)
         ld = luzes.direcional
         dir_view = glm.normalize(glm.mat3(visao) * ld.direcao)
         self._enviar(prog, "u_luz_dir.ativa", int(ld.ativa))
@@ -158,7 +164,6 @@ class Renderizador:
         self._enviar(prog, "u_luz_dir.cor", ld.cor)
         self._enviar(prog, "u_luz_dir.fator_amb", float(ld.fator_amb))
 
-        # Luzes pontuais: ponto (w = 1) -> V * vec4(pos, 1.0)
         pontuais = luzes.pontuais[:MAX_PONTUAIS]
         self._enviar(prog, "u_num_pontuais", len(pontuais))
         for i, lp in enumerate(pontuais):
@@ -171,6 +176,56 @@ class Renderizador:
             self._enviar(prog, f"{pref}.kc", float(lp.kc))
             self._enviar(prog, f"{pref}.kl", float(lp.kl))
             self._enviar(prog, f"{pref}.kq", float(lp.kq))
+
+        ch = luzes.choques
+        torres_ativas = ch.torres_ativas and len(ch.torres) > 0
+        self._enviar(prog, "u_choques_torre_ativos", int(torres_ativas))
+        if torres_ativas:
+            n_t = min(len(ch.torres), MAX_CHOQUES_TORRE)
+            self._enviar(prog, "u_num_choques_torre", n_t)
+            self._enviar(
+                prog,
+                "u_choques_torre_params",
+                (ch.torre_kc, ch.torre_kl, ch.torre_kq, ch.torre_fator_amb),
+            )
+            self._enviar(prog, "u_choques_torre_raio", float(ch.torre_raio))
+            for i in range(n_t):
+                lt = ch.torres[i]
+                pv = visao * glm.vec4(lt.posicao, 1.0)
+                self._buf_torre_pos[i] = (pv.x, pv.y, pv.z)
+                self._buf_torre_cor[i] = (lt.cor.x, lt.cor.y, lt.cor.z)
+            self._enviar(prog, "u_choques_torre_pos", self._buf_torre_pos)
+            self._enviar(prog, "u_choques_torre_cor", self._buf_torre_cor)
+        else:
+            self._enviar(prog, "u_num_choques_torre", 0)
+
+        arestas_ativas = ch.arestas_ativas and len(ch.arestas) > 0
+        self._enviar(prog, "u_choques_aresta_ativos", int(arestas_ativas))
+        if arestas_ativas:
+            if len(ch.arestas) > MAX_CHOQUES_ARESTA:
+                arestas_ord = sorted(ch.arestas, key=lambda a: not a.no_corte)
+            else:
+                arestas_ord = ch.arestas
+            n_a = min(len(arestas_ord), MAX_CHOQUES_ARESTA)
+            self._enviar(prog, "u_num_choques_aresta", n_a)
+            self._enviar(
+                prog,
+                "u_choques_aresta_params",
+                (ch.aresta_kc, ch.aresta_kl, ch.aresta_kq, ch.aresta_fator_amb),
+            )
+            self._enviar(prog, "u_choques_aresta_raio", float(ch.aresta_raio))
+            self._enviar(prog, "u_cor_choque_corte", ch.cor_aresta_corte)
+            self._enviar(prog, "u_cor_choque_fora", ch.cor_aresta_fora)
+            for i in range(n_a):
+                la = arestas_ord[i]
+                pa = visao * glm.vec4(la.ponto_a, 1.0)
+                pb = visao * glm.vec4(la.ponto_b, 1.0)
+                self._buf_aresta_a[i] = (pa.x, pa.y, pa.z, float(la.intensidade))
+                self._buf_aresta_b[i] = (pb.x, pb.y, pb.z, 1.0 if la.no_corte else 0.0)
+            self._enviar(prog, "u_choques_aresta_a", self._buf_aresta_a)
+            self._enviar(prog, "u_choques_aresta_b", self._buf_aresta_b)
+        else:
+            self._enviar(prog, "u_num_choques_aresta", 0)
 
     def desenhar_objeto(
         self,
@@ -192,6 +247,7 @@ class Renderizador:
         mv = self._matriz_visao * modelo
         self._enviar(prog, "u_model", modelo)
         self._enviar(prog, "u_normal_matrix", self._matriz_normal(mv))
+        self._enviar(prog, "u_uv_escala", material.uv_escala)
         self._enviar(prog, "u_material.ka", material.ka)
         self._enviar(prog, "u_material.kd", material.kd)
         self._enviar(prog, "u_material.ks", material.ks)
@@ -199,8 +255,6 @@ class Renderizador:
 
         vao = self._vao_de(prog, vbo, ibo, CAMPOS_CENA)
         vao.render(mode=modo)
-
-    # --- Passada 2: linhas 3D (arestas do grafo e ondas eletricas) ---
 
     def iniciar_linhas_3d(
         self,
@@ -246,8 +300,6 @@ class Renderizador:
 
         vao = self._vao_de(prog, vbo, ibo, CAMPOS_LINHA)
         vao.render(mode=modo)
-
-    # --- Passada 3: placar 2D ortografico sobre a cena ---
 
     def iniciar_placar_2d(self, largura: int, altura: int) -> None:
         """Prepara projecao ortografica 2D com teste de profundidade desligado."""
