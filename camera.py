@@ -31,6 +31,7 @@ class Camera:
         pos: tuple[float, float, float] = POSICAO_INICIAL,
         altura_aerea: float = ALTURA_AEREA_INICIAL,
     ) -> None:
+        """Inicializa parâmetros de pose, modo de visualização e projeção."""
         self.pos = glm.vec3(*pos)
         self.yaw = YAW_INICIAL
         self.pitch = PITCH_INICIAL
@@ -102,7 +103,7 @@ class Camera:
     def zoom(self, yoffset: float) -> None:
         """Aproxima ou afasta a câmera conforme o modo ativo."""
         if self.modo == "livre":
-            self.pos += self.frente() * (yoffset * PASSO_ZOOM_LIVRE) 
+            self.pos += self.frente() * (yoffset * PASSO_ZOOM_LIVRE)
         else:
             nova_altura = self.altura_aerea - yoffset * PASSO_ZOOM_AEREO
             self.altura_aerea = max(
@@ -131,15 +132,15 @@ class Camera:
         topo = dist * math.tan(self.fovy / 2.0)
         direita = topo * self.aspecto
         return glm.ortho(-direita, direita, -topo, topo, self.near, self.far)
-    
+
     def raio(self, mx: float, my: float, largura: int, altura: int) -> tuple[glm.vec3, glm.vec3]:
-        """Raio no mundo que passa pelo ponto (mx, my) da janela."""
-        x = 2.0 * mx / largura - 1.0          # pixel -> NDC
-        y = 1.0 - 2.0 * my / altura           # GLFW tem y para baixo; NDC tem y para cima
+        """Calcula origem e direção normalizada do raio no mundo para o pixel (mx, my)."""
+        x = 2.0 * mx / largura - 1.0
+        y = 1.0 - 2.0 * my / altura
         inv = glm.inverse(self.projecao() * self.visao())
-        perto = inv * glm.vec4(x, y, -1.0, 1.0)   # ponto no plano near
-        longe = inv * glm.vec4(x, y, 1.0, 1.0)    # ponto no plano far
-        perto = glm.vec3(perto) / perto.w         # divisão perspectiva, agora ao contrário
+        perto = inv * glm.vec4(x, y, -1.0, 1.0)
+        longe = inv * glm.vec4(x, y, 1.0, 1.0)
+        perto = glm.vec3(perto) / perto.w
         longe = glm.vec3(longe) / longe.w
         return perto, glm.normalize(longe - perto)
 
