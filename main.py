@@ -52,12 +52,12 @@ TEXTURAS = RAIZ / "texturas"
 CAMINHO_TORRE = RAIZ / "modelos" / "torre.off"
 
 TITULO_JANELA = "Maix que um Circuito"
-LADO = 700
+LADO = 900
 FUNDO = (0.10, 0.11, 0.13, 1.0)
 INTERVALO_FPS = 0.25
 VERSAO_OPENGL = (4, 0)
 AMOSTRAS_MSAA = 4
-ALTURA_ALVO_MODELO = 1.8
+ALTURA_ALVO_MODELO = 4
 DT_MAX = 0.05
 
 # Cores das primitivas de linha convertidas uma unica vez de sRGB para espaco linear
@@ -170,6 +170,9 @@ def main() -> None:
     ]
 
     def atualizar_titulo() -> None:
+        if estado_jogo.estado == "GAME_OVER":
+            glfw.set_window_title(janela, "GAME OVER, tente novamente aperte R")
+            return
         vsync_txt = "ON" if estado_ctx.vsync else "OFF"
         cull_txt = "ON" if estado_ctx.cull_face else "OFF"
         l1_txt = "ON" if cena_luzes.direcional.ativa else "OFF"
@@ -240,7 +243,9 @@ def main() -> None:
             mx, my = glfw.get_cursor_pos(window)
             w, h = glfw.get_window_size(window)
             origem, direcao = cam.raio(mx, my, w, h)
-            u = estado_jogo.torre_no_raio(origem, direcao)
+            u = estado_jogo.torre_no_raio(origem, direcao,
+                                          meia_larg=0.25 * ALTURA_ALVO_MODELO,
+                                          altura=ALTURA_ALVO_MODELO + 0.1)
             if u is not None:
                 estado_jogo.inverter_torre(u)
                 atualizar_titulo()
@@ -288,7 +293,7 @@ def main() -> None:
             t_ant = agora
             dt = min(DT_MAX, dt_real)
 
-            if estado_jogo.estado != "PAUSED":
+            if estado_jogo.estado not in ("PAUSED", "GAME_OVER"):
                 tempo_anim += dt
                 luz_movel.posicao = glm.vec3(
                     raio_orbita * math.cos(tempo_anim * 0.8),

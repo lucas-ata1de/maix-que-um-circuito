@@ -6,7 +6,7 @@ import random
 class EstadoJogo:
     """Armazena estado atual do jogo, o grafo ,corte atual etc"""
     n: int = 0 
-    def __init__(self,n: int =16,meio_lado : float =12,dist_min: float = 3.2):
+    def __init__(self,n: int =16,meio_lado : float =12,dist_min: float = 4.0):
         self.meio_lado = meio_lado
         self.n = n
         self.dist_min = dist_min
@@ -39,7 +39,7 @@ class EstadoJogo:
         if self.tempo_restante <= 0.0:
             self.estado = "GAME_OVER"
 
-    def torre_no_raio(self, o, d, meia_larg: float = 0.45, altura: float = 1.9) -> int | None:
+    def torre_no_raio(self, o, d, meia_larg: float = 0.45, altura: float = 4) -> int | None:
         melhor, melhor_t = None, math.inf
         for u, (x, y, z) in enumerate(self.posicoes):
             t = raio_aabb(o, d, (x - meia_larg, y, z - meia_larg),
