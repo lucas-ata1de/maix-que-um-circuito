@@ -68,7 +68,7 @@ def carregar_off(caminho: Path | str, altura_alvo: float = 1.8) -> tuple[np.ndar
 
     minimo, maximo = posicoes.min(axis=0), posicoes.max(axis=0)
     centro = 0.5 * (minimo + maximo)
-    escala = float(altura_alvo) / float(maximo[1] - minimo[1])
+    escala = float(altura_alvo) / float(maximo[1] - minimo[1]) * 3
     m_enq = (
         glm.scale(glm.mat4(1.0), glm.vec3(escala))
             * glm.translate(glm.mat4(1.0), glm.vec3(-float(centro[0]), -float(minimo[1]), -float(centro[2])))
@@ -90,7 +90,7 @@ def carregar_off(caminho: Path | str, altura_alvo: float = 1.8) -> tuple[np.ndar
     return dados, m_enq
 
 
-def criar_onda_eletrica(raio: float = 0.35, amp: float = 0.06, picos: int = 6, pontos: int = 64) -> np.ndarray:
+def criar_onda_eletrica(raio: float = 0.35, amp: float = 0.06, picos: int = 6, pontos: int = 16) -> np.ndarray:
     """Anel senoidal ao redor do eixo Y para LINE_LOOP (formato '3f')."""
     t = np.linspace(0.0, 2.0 * np.pi, pontos, endpoint=False)
     x = raio * np.cos(t)
@@ -99,7 +99,7 @@ def criar_onda_eletrica(raio: float = 0.35, amp: float = 0.06, picos: int = 6, p
     return np.column_stack((x, y, z)).astype("f4")
 
 
-def criar_segmento_aresta(subdivisoes: int = 2) -> np.ndarray:
+def criar_segmento_aresta(subdivisoes: int = 8) -> np.ndarray:
     """Segmento unitario de (0,0,0) ate (0,0,1) para LINE_STRIP (formato '3f')."""
     z = np.linspace(0.0, 1.0, subdivisoes, dtype="f4")
     zeros = np.zeros_like(z)

@@ -161,7 +161,16 @@ def main() -> None:
         elif key == glfw.KEY_R:
             estado_jogo.iniciar_fase(estado_jogo.n)
 
-    def mouse(_window: Any, button: int, action: int, _mods: int) -> None:
+    def mouse(window: Any, button: int, action: int, _mods: int) -> None:
+        if button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS:
+            mx, my = glfw.get_cursor_pos(window)
+            w, h = glfw.get_window_size(window)
+            origem, direcao = cam.raio(mx, my, w, h)
+            u = estado_jogo.torre_no_raio(origem, direcao)
+            if u is not None:
+                estado_jogo.inverter_torre(u)
+                atualizar_titulo()
+                return
         if button != glfw.MOUSE_BUTTON_RIGHT:
             return
         if action == glfw.RELEASE:
@@ -223,6 +232,9 @@ def main() -> None:
         vertical = float(glfw.get_key(janela, glfw.KEY_SPACE) == glfw.PRESS) - float(
             glfw.get_key(janela, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
         )
+        avancar *= int(estado_jogo.estado in ("START","PLAYING"))
+        lateral *= int(estado_jogo.estado in ("START","PLAYING"))
+        vertical *= int(estado_jogo.estado in ("START","PLAYING"))
 
         cam.mover(avancar, lateral, dt, vertical)
         estado_jogo.atualizar(dt)
@@ -278,8 +290,8 @@ def main() -> None:
                     *glm.scale(I, glm.vec3(1.0, 1.0, comp)))
                 no_corte = estado_jogo.graph.ta_no_corte(u, v)
                 prog_linha["u_cor"].value = (1.0, 0.90, 0.10) if no_corte else (0.38, 0.40, 0.45)
-                prog_linha["u_amp"].value = 0.12 if no_corte else 0.03
-                prog_linha["u_vel"].value = 18.0 if no_corte else 5.0
+                prog_linha["u_amp"].value = 0.2 if no_corte else 0.03
+                prog_linha["u_vel"].value = 20.0 if no_corte else 5.0
                 prog_linha["u_seed"].value = float(u * 17 + v)
                 prog_linha["u_modelo"].write(m_aresta.to_bytes())
                 vao_aresta.render(moderngl.LINE_STRIP)

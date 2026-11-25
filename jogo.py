@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 import grafo
+import math
 import random
 
 class EstadoJogo:
     """Armazena estado atual do jogo, o grafo ,corte atual etc"""
     n: int = 0 
-    def __init__(self,n: int =10,meio_lado : float =12,dist_min: float = 1.2):
+    def __init__(self,n: int =16,meio_lado : float =12,dist_min: float = 3.2):
         self.meio_lado = meio_lado
         self.n = n
         self.dist_min = dist_min
@@ -38,6 +39,33 @@ class EstadoJogo:
         if self.tempo_restante <= 0.0:
             self.estado = "GAME_OVER"
 
+    def torre_no_raio(self, o, d, meia_larg: float = 0.45, altura: float = 1.9) -> int | None:
+        melhor, melhor_t = None, math.inf
+        for u, (x, y, z) in enumerate(self.posicoes):
+            t = raio_aabb(o, d, (x - meia_larg, y, z - meia_larg),
+                                (x + meia_larg, y + altura, z + meia_larg))
+            if t is not None and t < melhor_t:     # a mais próxima da câmera
+                melhor, melhor_t = u, t
+        return melhor
+
+
+def raio_aabb(o, d, bmin, bmax) -> float | None:
+    """Método das faixas (slabs): t em que o raio o + t*d entra na caixa, ou None."""
+    t_entra, t_sai = 0.0, math.inf
+    for i in range(3):                       # eixos x, y, z
+        if abs(d[i]) < 1e-9:                 # raio paralelo a esse par de planos
+            if not (bmin[i] <= o[i] <= bmax[i]):
+                return None
+            continue
+        t1 = (bmin[i] - o[i]) / d[i]
+        t2 = (bmax[i] - o[i]) / d[i]
+        if t1 > t2:
+            t1, t2 = t2, t1
+        t_entra = max(t_entra, t1)
+        t_sai = min(t_sai, t2)
+        if t_entra > t_sai:
+            return None
+    return t_entra
 
 
 

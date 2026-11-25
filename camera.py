@@ -131,6 +131,17 @@ class Camera:
         topo = dist * math.tan(self.fovy / 2.0)
         direita = topo * self.aspecto
         return glm.ortho(-direita, direita, -topo, topo, self.near, self.far)
+    
+    def raio(self, mx: float, my: float, largura: int, altura: int) -> tuple[glm.vec3, glm.vec3]:
+        """Raio no mundo que passa pelo ponto (mx, my) da janela."""
+        x = 2.0 * mx / largura - 1.0          # pixel -> NDC
+        y = 1.0 - 2.0 * my / altura           # GLFW tem y para baixo; NDC tem y para cima
+        inv = glm.inverse(self.projecao() * self.visao())
+        perto = inv * glm.vec4(x, y, -1.0, 1.0)   # ponto no plano near
+        longe = inv * glm.vec4(x, y, 1.0, 1.0)    # ponto no plano far
+        perto = glm.vec3(perto) / perto.w         # divisão perspectiva, agora ao contrário
+        longe = glm.vec3(longe) / longe.w
+        return perto, glm.normalize(longe - perto)
 
 
 if __name__ == "__main__":
