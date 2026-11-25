@@ -119,7 +119,7 @@ $\sin(\pi z)$, que vale zero nas pontas e mantém as pontas presas no topo das
 torres; isso produz a faísca sem reescrever o VBO.
 
 \paragraph{Reaproveitamento.} Do jogo 2D (Atividade 03) vem o padrão da
-janela e do laço \preencher{confirmar}: \emph{hints} de contexto 4.0 core, medição de $\Delta t$ com
+janela e do laço \emph{hints} de contexto 4.0 core, medição de $\Delta t$ com
 passo máximo, FPS no título e VSync por tecla. Do visualizador da apostila vêm
 \arq{malha.py} e \arq{texturas.py} (usados como estão) e a base de
 \arq{camera.py} e \arq{material.py}. Na câmera foram criados os dois modos, a
@@ -158,7 +158,7 @@ VSync desligado & 279,5 (366,5 em outra execução) \\
 \bottomrule
 \end{tabular}
 \caption{Taxas medidas pelo próprio contador do jogo, lidas do título pelo
-script de capturas (janela 900$\times$900, \preencher{modelo da GPU}).}
+script de capturas (janela 900$\times$900, placa integrada).}
 \end{table}
 
 \paragraph{Animação autônoma.} Três elementos se movem sozinhos, em função do
@@ -324,9 +324,7 @@ placar também são convertidas para linear (na CPU, uma vez, com
 desligado durante o \texttt{clear} e religado logo depois, evitando que ela seja
 codificada duas vezes.
 
-\paragraph{Modelo de terceiros.} A torre vem do modelo
-\preencher{``High Voltage Transmission Line Tower (tileable)'', autor e URL no
-Sketchfab, licença}. O arquivo OBJ foi convertido para OFF fora do programa por
+\paragraph{Modelo de terceiros.} A torre vem do modelo "High Voltage Transmission Line Tower (tileable)" (https://skfb.ly/ot8Sx) by mednios is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/). O arquivo OBJ foi convertido para OFF fora do programa por
 um script Python. Os seis cabos e os isoladores, que se estendiam por 44
 unidades, foram descartados, e só a estrutura da torre foi mantida
 (1247 vértices, 2031 triângulos). As coordenadas restantes não foram alteradas.
@@ -409,7 +407,6 @@ risco verde é a meta e a barra azul é o tempo restante.
 % =====================================================================
 \section{Divisão de tarefas}
 % =====================================================================
-\preencher{Conferir e ajustar: rascunho montado a partir do histórico do git.}
 
 \begin{itemize}
 \item \textbf{Lucas Ataide}: escolha do tema e da mecânica; \arq{grafo.py}
@@ -448,7 +445,7 @@ Explicações e revisão de código; código da seleção pelo clique (raio do c
 e teste raio $\times$ caixa), do placar, da colisão da câmera e dos títulos de
 fim de jogo; resolução de um conflito no git; script de capturas; redação deste
 relatório a partir do código. \\
-Gabriel & \preencher{ferramenta} & \preencher{uso} \\
+Gabriel & Gemini (Google) & \preencher{uso} \\
 \bottomrule
 \end{tabularx}
 \end{table}
