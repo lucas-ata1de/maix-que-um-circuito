@@ -84,7 +84,7 @@ def criar_onda_eletrica(
     raio: float = 0.35,
     amp: float = 0.06,
     picos: int = 6,
-    pontos: int = 64,
+    pontos: int = 16,
 ) -> np.ndarray:
     """Anel senoidal ao redor do eixo Y para LINE_LOOP (formato '3f')."""
     t = np.linspace(0.0, 2.0 * np.pi, pontos, endpoint=False)

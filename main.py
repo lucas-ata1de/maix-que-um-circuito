@@ -18,6 +18,7 @@ Controles de Teclado:
     Esc                 Fechar janela
 
 Controles de Mouse:
+    Botao Esquerdo (clique)    Inverte o lado do corte da torre sob o cursor
     Botao Direito + Arrastar   Girar orientacao da camera (yaw/pitch no modo livre)
     Roda do Mouse (Scroll)     Zoom (aproximar/afastar nos modos livre e aereo)
 """

@@ -1,0 +1,459 @@
+% =====================================================================
+%  Relatório: Atividade 05 (Maix que um Circuito, jogo 3D)
+%  MCCC007-23 Computação Gráfica (UFABC), Prof. João Paulo Gois
+%
+%  Figuras: python capturas.py   (abre o jogo e gera figuras/*.jpg)
+%  Compilar duas vezes:  pdflatex relatorio.tex && pdflatex relatorio.tex
+%
+%  \preencher{...} aparece em VERMELHO no PDF: algo que os autores ainda
+%  precisam confirmar. Antes de entregar: grep -n 'preencher{' relatorio.tex
+% =====================================================================
+\documentclass[a4paper,11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazilian]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\graphicspath{{figuras/}}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\preencher}[1]{\textcolor{red}{\textbf{[}#1\textbf{]}}}
+\newcommand{\tecla}[1]{\fbox{\footnotesize\ttfamily #1}}
+\newcommand{\arq}[1]{\texttt{#1}}
+
+\setlist{itemsep=2pt,topsep=4pt}
+
+\title{\textbf{Maix que um Circuito}\\[2pt]
+  \large Jogo 3D em ModernGL sobre o problema do corte máximo\\[2pt]
+  \normalsize MCCC007-23 Computação Gráfica, Atividade 05, Prof.\ João Paulo Gois}
+\author{Lucas Ataide (RA 11202421363) \and Gabriel Frigo (RA 11202321002)}
+\date{24 de novembro de 2026\\[2pt]
+  \small Repositório: \url{https://github.com/lucas-ata1de/maix-que-um-circuito}}
+
+\begin{document}
+\maketitle
+
+% =====================================================================
+\section{O jogo}
+% =====================================================================
+A arena tem $n=16$ torres de transmissão, que são os vértices de um grafo
+aleatório; os fios entre elas são as arestas. Cada torre pertence a um de dois
+lados (azul ou vermelho). Uma aresta está \emph{no corte} quando liga torres de
+lados diferentes: nesse caso o fio faísca em amarelo; caso contrário, fica cinza
+e quase parado. O jogador anda pela arena e clica nas torres para trocá-las de
+lado. Vence quem levar o número de arestas no corte até a \emph{meta} antes de o
+cronômetro de 60\,s zerar; se o tempo acabar, perde.
+
+O tema vem da disciplina de Algoritmos Probabilísticos: a partição inicial é
+sorteada pelo algoritmo aleatorizado de $\tfrac12$-aproximação para o corte
+máximo (sorteia cada vértice com probabilidade $\tfrac12$ até obter um corte com
+pelo menos $m/2$ arestas), e a meta da fase é o melhor corte encontrado por
+busca local gulosa com 10 reinícios aleatórios. Como a busca local só faz inversões
+de um vértice, o mesmo movimento do jogador, a meta é sempre alcançável. A fase
+nunca começa já vencida: o sorteio é refeito enquanto o corte inicial for maior
+ou igual à meta.
+
+\paragraph{Controles.} \tecla{W}\tecla{A}\tecla{S}\tecla{D} andam,
+\tecla{Espaço}/\tecla{Shift} sobem e descem (câmera livre);
+\tecla{T} alterna a câmera; \tecla{Enter} inicia; \tecla{P} pausa;
+\tecla{R} reinicia com um novo grafo; \tecla{1}/\tecla{2} ligam e desligam a luz
+direcional e a pontual; \tecla{Y} liga e desliga o VSync; \tecla{C}/\tecla{V}
+desligam e ligam o descarte de faces; \tecla{Esc} fecha. Mouse: clique esquerdo
+numa torre troca o lado dela; arrastar com o botão direito gira a câmera; a roda
+aproxima e afasta. A mesma lista está no início de \arq{main.py}.
+
+% =====================================================================
+\section{Arquitetura}
+% =====================================================================
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}lYl@{}}
+\toprule
+\textbf{Módulo} & \textbf{Responsabilidade} & \textbf{Origem} \\
+\midrule
+\arq{main.py} & Janela GLFW, callbacks, laço de jogo ($\Delta t$, FPS, VSync), matrizes de modelo de cada objeto e ordem das passadas de desenho. & novo \\
+\arq{jogo.py} & Classe \texttt{EstadoJogo}: estado da partida, cronômetro, sorteio das posições, \emph{picking} (raio $\times$ caixa) e colisão esfera $\times$ caixa. & novo \\
+\arq{grafo.py} & Classe \texttt{Graph}, geração $G(n,p)$ conexa, corte aleatorizado $\ge m/2$ e busca local (meta). & novo \\
+\arq{camera.py} & Classe \texttt{Camera}: modos livre e aéreo, matrizes de visão (LookAt) e projeção. & adaptado da apostila \\
+\arq{renderizador.py} & Classe \texttt{Renderizador}: única que conhece shaders, VAOs e uniforms; três passadas (objetos, linhas, placar). & novo \\
+\arq{material.py} & \texttt{Material}, \texttt{LuzDirecional}, \texttt{LuzPontual}, \texttt{CenaLuzes} e conversão sRGB$\to$linear. & adaptado da apostila \\
+\arq{malha.py}, \arq{texturas.py} & Leitura do OFF, normais, mapeamento cilíndrico com costura; carga de imagens em \texttt{GL\_SRGB8\_ALPHA8} com mipmaps. & visualizador da apostila \\
+\arq{geometria.py} & Geometrias procedurais (piso, cubo, anel, segmento, quadrado do placar) e enquadramento da torre por matriz. & novo \\
+\bottomrule
+\end{tabularx}
+\caption{Módulos do projeto.}
+\end{table}
+
+\paragraph{Como as classes se comunicam.} \texttt{main} cria uma instância de
+cada classe e as conecta pelo laço. Os callbacks de teclado e mouse traduzem
+eventos em chamadas: o clique chama \texttt{Camera.raio} para obter o raio do
+cursor e \texttt{EstadoJogo.torre\_no\_raio} para achar a torre atingida, e então
+\texttt{EstadoJogo.inverter\_torre}, que usa o \texttt{Graph} para trocar o lado
+e recontar o corte. A cada quadro, \texttt{main} chama \texttt{Camera.mover},
+\texttt{EstadoJogo.empurrar\_esfera} (colisão) e \texttt{EstadoJogo.atualizar(dt)}
+e depois entrega ao \texttt{Renderizador} as matrizes e os \texttt{Material}
+de cada objeto. A lógica do jogo (\arq{jogo.py}, \arq{grafo.py}) não importa
+\texttt{moderngl}: só o \texttt{Renderizador} fala com a GPU.
+
+\paragraph{Shaders.} São dois programas.
+\arq{cena.vert}/\arq{cena.frag} desenham os objetos iluminados: o vertex shader
+leva posição e normal ao espaço da câmera; o fragment shader avalia
+Blinn--Phong para a luz direcional e para cada luz pontual e multiplica
+$\kappa_a$ e $\kappa_d$ pela cor da textura.
+\arq{linha.vert}/\arq{linha.frag} desenham as linhas e o placar com cor sólida.
+Nas arestas, o vertex shader desloca os vértices internos de um segmento
+unitário com senos que dependem do tempo, multiplicados pelo envelope
+$\sin(\pi z)$, que vale zero nas pontas e mantém as pontas presas no topo das
+torres; isso produz a faísca sem reescrever o VBO.
+
+\paragraph{Reaproveitamento.} Do jogo 2D (Atividade 03) vem o padrão da
+janela e do laço \preencher{confirmar}: \emph{hints} de contexto 4.0 core, medição de $\Delta t$ com
+passo máximo, FPS no título e VSync por tecla. Do visualizador da apostila vêm
+\arq{malha.py} e \arq{texturas.py} (usados como estão) e a base de
+\arq{camera.py} e \arq{material.py}. Na câmera foram criados os dois modos, a
+navegação por yaw/pitch e o método \texttt{raio}; no material, os presets do
+jogo. O resto é do grupo. O tema do jogo é novo, não uma extensão do jogo 2D.
+
+\paragraph{VBOs.} Todos os VBOs (torre com IBO, piso, cubo, anel, segmento e
+quadrado do placar) e as texturas são criados uma única vez, antes do laço.
+Cada torre, borda, anel, aresta e barra é o mesmo VBO desenhado com outra matriz
+de modelo. Nenhum VBO é reescrito durante o jogo, então não há exceção a
+justificar. Primitivas usadas: \texttt{TRIANGLES} (objetos),
+\texttt{LINE\_STRIP} (arestas), \texttt{LINE\_LOOP} (anéis e molduras do
+placar) e \texttt{TRIANGLE\_FAN} (barras do placar).
+
+% =====================================================================
+\section{Laço de jogo e animação}
+% =====================================================================
+A cada quadro, $\Delta t$ é a diferença entre dois \texttt{glfw.get\_time()}
+consecutivos, limitada a \texttt{DT\_MAX} $=0{,}05$\,s. Toda velocidade está em
+unidades por segundo e é multiplicada por $\Delta t$: a câmera anda a 6\,u/s, o
+cronômetro desconta $\Delta t$, e os anéis giram $2{,}2$\,rad/s. Por isso a
+velocidade do jogo não depende da taxa de quadros: com 60 ou com 280 quadros
+por segundo, a soma dos $\Delta t$ em um segundo é a mesma, e o deslocamento
+também. A tecla \tecla{Y} chama
+\texttt{glfw.swap\_interval(0 ou 1)} e o FPS aparece no título, recalculado a
+cada 0,25\,s.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Modo} & \textbf{FPS observado} \\
+\midrule
+VSync ligado & 60,2 \\
+VSync desligado & 279,5 (366,5 em outra execução) \\
+\bottomrule
+\end{tabular}
+\caption{Taxas medidas pelo próprio contador do jogo, lidas do título pelo
+script de capturas (janela 900$\times$900, \preencher{modelo da GPU}).}
+\end{table}
+
+\paragraph{Animação autônoma.} Três elementos se movem sozinhos, em função do
+tempo de animação: os anéis no topo das torres giram em torno de $y$, as arestas
+faíscam e a luz pontual orbita a arena num círculo de raio 8 com uma leve
+oscilação vertical.
+
+\paragraph{Estados e pausa.} Os estados são \texttt{START}, \texttt{PLAYING},
+\texttt{PAUSED}, \texttt{VICTORY} e \texttt{GAME\_OVER}. \tecla{Enter} inicia,
+\tecla{P} pausa e retoma, e \tecla{R} sorteia uma nova fase sem fechar o
+programa. Na pausa, nada se move: \texttt{EstadoJogo.atualizar} só desconta tempo
+em \texttt{PLAYING}, a câmera só anda em \texttt{START}/\texttt{PLAYING} e o
+tempo de animação (\texttt{tempo\_anim}), que comanda anéis, faíscas e luz, só
+avança fora da pausa e do fim de jogo. O tempo pausado não entra no $\Delta t$:
+o instante anterior é atualizado em todo quadro, inclusive durante a pausa,
+então o primeiro $\Delta t$ depois da retomada é de um quadro só, e ainda é
+limitado por \texttt{DT\_MAX}. No fim, o título mostra
+``GAME OVER, tente novamente aperte R'' ou
+``Ganhou! Tente novamente apertando R. Sobrou $x$ segundos.''
+
+% =====================================================================
+\section{Transformações e câmera}
+% =====================================================================
+\paragraph{Matrizes de modelo.} Cada objeto recebe sua própria matriz
+$M$, sempre na ordem escala, depois rotação, depois translação (multiplicação
+da direita para a esquerda):
+\begin{itemize}
+\item \textbf{Torre} (arquivo OFF): $M = T(x,0,z)\,M_{\text{enq}}$, com
+  $M_{\text{enq}} = S(4/h)\,T(-c_x,-y_{\min},-c_z)$, onde $h$ é a altura da caixa
+  envolvente e $c$ o seu centro. Os vértices do arquivo vão para o VBO sem
+  alteração; o enquadramento (pés em $y=0$, altura 4) é feito só pela matriz.
+\item \textbf{Bordas}: $T\,S(s_x,s_y,s_z)$ sobre o cubo unitário, com escala
+  \emph{não uniforme} (por exemplo $24{,}4\times0{,}4\times0{,}4$).
+\item \textbf{Anéis}: $T(\text{topo})\,R_y(2{,}2\,t + 0{,}7\,u)$.
+\item \textbf{Arestas}: $T(A)\,R_y(\operatorname{atan2}(d_x,d_z))\,S(1,1,\lVert B-A\rVert)$,
+  que leva o segmento $(0,0,0)\to(0,0,1)$ até o segmento $A\to B$.
+\item \textbf{Placar}: $T(x,y,0)\,S(\ell,a,1)$ sobre o quadrado $[0,1]^2$.
+\end{itemize}
+
+\paragraph{Visão.} As duas câmeras usam \texttt{glm.lookAt}.
+No modo \textbf{livre}, o olho é \texttt{pos} e o alvo é
+\texttt{pos + frente}, com
+$\text{frente} = (\cos\phi\cos\theta,\ \sin\phi,\ \cos\phi\sin\theta)$, sendo
+$\theta$ o yaw e $\phi$ o pitch (limitado a $\pm85^\circ$ para a direção de
+visão nunca ficar paralela ao vetor \emph{up}). WASD movem no plano horizontal,
+o botão direito altera yaw e pitch e a roda avança. No modo \textbf{aéreo}, o
+olho fica em $(0,\,h,\,0{,}2)$ olhando para a origem, com $h$ ajustado pela roda
+entre 4 e 60; o pequeno deslocamento em $z$ evita a direção de visão paralela
+ao vetor \emph{up}. \tecla{T} alterna os modos.
+
+\paragraph{Projeção.} Perspectiva, com \texttt{glm.perspective} de
+$45^\circ$. O \textbf{near} é $0{,}1$: menor que o raio de colisão da câmera
+($0{,}5$), de modo que o plano near nunca entra no chão nem nas torres. O
+\textbf{far} é 150: a arena tem $24\times24$ e, com a câmera aérea no alto
+(60), o canto mais distante da arena fica a cerca de 62 unidades; 150 deixa
+folga também para a câmera livre vista de longe, sem desperdiçar a precisão do
+depth buffer (a razão far/near é 1500).
+
+\paragraph{Redimensionamento.} \texttt{glfw.set\_framebuffer\_size\_callback}
+ajusta \texttt{ctx.viewport} para o novo tamanho do framebuffer e atualiza a
+razão de aspecto da câmera ($\text{largura}/\text{altura}$), usada pela
+projeção no quadro seguinte. A janela é redimensionável.
+
+\paragraph{Matriz normal.} O \texttt{Renderizador} calcula, na CPU, para cada
+objeto, $N = \big((V M)_{3\times3}^{-1}\big)^{T}$ e envia como
+\texttt{u\_normal\_matrix}. Ela é necessária por causa das bordas, que têm escala
+não uniforme: aplicar $VM$ diretamente à normal a incliná-la e a deixaria fora da
+perpendicular à superfície.
+
+% =====================================================================
+\section{Iluminação e materiais}
+% =====================================================================
+O modelo é \textbf{Blinn--Phong} avaliado no fragment shader (sombreamento de
+Phong). Para cada luz ativa:
+\[
+I = c_{\text{luz}}\big(f_a\,\kappa_a\,t
+  + \kappa_d\,t\,\max(N\!\cdot\!L,0)
+  + \kappa_s\,\max(N\!\cdot\!H,0)^{\alpha}\big),
+\qquad H = \frac{L+V}{\lVert L+V\rVert},
+\]
+em que $t$ é a cor da textura e $f_a$ a fração ambiente da luz. A luz pontual
+ainda é multiplicada pela atenuação $1/(k_c + k_l d + k_q d^2)$. O especular
+só é somado quando $N\cdot L>0$.
+
+\paragraph{Espaço.} Tudo é calculado no \textbf{espaço da câmera}: o vertex
+shader envia posição e normal multiplicadas por $V M$; na CPU, a direção da luz
+direcional é multiplicada por $V_{3\times3}$ (vetor, sem translação) e a posição
+da luz pontual por $V$ com $w=1$ (ponto). Assim o vetor de visão é
+simplesmente $V = -p$.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}lY@{}}
+\toprule
+\textbf{Fonte} & \textbf{Parâmetros} \\
+\midrule
+Direcional (\tecla{1}) & direção $(-0{,}4,-1,-0{,}35)$, cor $(0{,}85;0{,}88;0{,}92)$, $f_a=0{,}22$. \\
+Pontual móvel (\tecla{2}) & órbita de raio 8 a $0{,}8$\,rad/s, altura $4+0{,}6\sin(1{,}6t)$; cor $(1{,}8;1{,}4;0{,}85)$, $f_a=0{,}08$; $k_c=1$, $k_l=0{,}05$, $k_q=0{,}012$. \\
+\bottomrule
+\end{tabularx}
+\caption{As duas fontes, ativas ao mesmo tempo e alternáveis por tecla.}
+\end{table}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Material} & $\kappa_a$ & $\kappa_d$ & $\kappa_s$ & $\alpha$ \\
+\midrule
+Piso (textura) & $(0{,}30;0{,}30;0{,}30)$ & $(0{,}85;0{,}85;0{,}85)$ & $(0{,}08;0{,}08;0{,}08)$ & 12 \\
+Torre azul (textura) & $(0{,}10;0{,}22;0{,}42)$ & $(0{,}22;0{,}55;0{,}95)$ & $(0{,}75;0{,}82;0{,}90)$ & 96 \\
+Torre vermelha (textura) & $(0{,}42;0{,}10;0{,}12)$ & $(0{,}95;0{,}24;0{,}26)$ & $(0{,}88;0{,}75;0{,}72)$ & 96 \\
+Bordas & $(0{,}14;0{,}15;0{,}18)$ & $(0{,}38;0{,}42;0{,}48)$ & $(0{,}32;0{,}34;0{,}38)$ & 32 \\
+\bottomrule
+\end{tabular}
+\caption{Materiais (coeficientes em espaço linear). O lado de cada torre é mostrado pela troca de material.}
+\end{table}
+
+Dos itens de iluminação, o jogo cumpre os cinco: dois tipos de fonte, uma fonte
+que se move, quatro materiais, matriz normal com objeto de escala não uniforme e
+todos os vetores no mesmo espaço (o da câmera).
+
+% =====================================================================
+\section{Texturas}
+% =====================================================================
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}llY@{}}
+\toprule
+\textbf{Imagem} & \textbf{Objeto} & \textbf{Fonte e licença} \\
+\midrule
+\arq{piso\_circuito.png} (512$\times$512) & piso & \preencher{Poly Haven, \url{https://polyhaven.com/textures}, CC0 --- confirmar nome da textura, ou ``gerada pelo grupo''} \\
+\arq{metal\_torre.png} (512$\times$512) & torres & \preencher{Poly Haven, CC0 --- confirmar nome da textura} \\
+\bottomrule
+\end{tabularx}
+\caption{Texturas de cor.}
+\end{table}
+
+\paragraph{Coordenadas de textura.} No \textbf{piso}, são geradas junto com a
+geometria, de $(0,0)$ a $(12,12)$, de modo que a imagem se repete $12\times12$
+vezes. Nas \textbf{torres}, são calculadas por \textbf{mapeamento cilíndrico}
+em torno de $y$ ($u$ pelo ângulo em torno do eixo, $v$ pela altura). A
+\textbf{costura} é tratada: num triângulo que cruza a linha $u=0/u=1$ (variação
+de $u$ maior que meia volta), os vértices com $u<0{,}5$ ganham uma cópia com
+$u+1$ e o triângulo passa a usar a cópia. A malha passa de 1247 para 1288
+vértices, e some a faixa em que a textura inteira apareceria espremida num
+único triângulo.
+
+\paragraph{Empacotamento e filtros.} As duas texturas usam
+\texttt{GL\_REPEAT}, necessário no piso, onde as coordenadas passam de 1, e na
+torre, por causa da costura com $u+1$. Os mipmaps são gerados na inicialização
+(\texttt{build\_mipmaps}) e a minificação é trilinear
+(\texttt{LINEAR\_MIPMAP\_LINEAR}, com filtragem anisotrópica de até 8 amostras);
+a magnificação é linear. Sem os mipmaps, o padrão do piso tremeria ao longe.
+
+\paragraph{sRGB.} Na \textbf{leitura}, as imagens são carregadas em
+\texttt{GL\_SRGB8\_ALPHA8}: a GPU converte cada texel de sRGB para linear antes do
+shader. A iluminação é somada em espaço linear, e as cores das linhas e do
+placar também são convertidas para linear (na CPU, uma vez, com
+\texttt{srgb\_para\_linear}). Na \textbf{escrita}, a cor é codificada em sRGB uma
+única vez, pelo estado \texttt{GL\_FRAMEBUFFER\_SRGB}, com uma janela pedida com
+\texttt{SRGB\_CAPABLE}. A cor de fundo já está em sRGB; por isso o estado é
+desligado durante o \texttt{clear} e religado logo depois, evitando que ela seja
+codificada duas vezes.
+
+\paragraph{Modelo de terceiros.} A torre vem do modelo
+\preencher{``High Voltage Transmission Line Tower (tileable)'', autor e URL no
+Sketchfab, licença}. O arquivo OBJ foi convertido para OFF fora do programa por
+um script Python. Os seis cabos e os isoladores, que se estendiam por 44
+unidades, foram descartados, e só a estrutura da torre foi mantida
+(1247 vértices, 2031 triângulos). As coordenadas restantes não foram alteradas.
+
+% =====================================================================
+\section{Colisões}
+% =====================================================================
+\paragraph{Formas.} A câmera livre é o corpo do jogador e é tratada como uma
+\textbf{esfera} de raio $r=0{,}5$. Cada torre é envolvida por uma \textbf{caixa
+alinhada aos eixos} (AABB) com meia largura 1 e altura 4,1, e o chão e as
+paredes da arena são planos.
+
+\paragraph{Teste e reação (esfera $\times$ AABB).} O ponto da caixa mais
+próximo do centro $p$ é $q = \operatorname{clamp}(p, b_{\min}, b_{\max})$,
+coordenada a coordenada. Há colisão se $0 < \lVert p-q\rVert < r$. A reação
+empurra a esfera para fora ao longo da normal:
+$p \leftarrow q + (p-q)\,r/\lVert p-q\rVert$. Só a parte do movimento que entra
+na torre é desfeita; a parte tangente continua, então a câmera desliza pela
+lateral da torre em vez de travar. Depois disso, um \emph{clamp} mantém
+$p_y \ge r$ (chão) e $|p_x|,|p_z| \le 12-r$ (paredes). Como as caixas têm
+altura, a colisão é de fato 3D: a câmera pode passar por cima das torres.
+
+\paragraph{Tunelamento.} O teste só funciona enquanto o centro da esfera não
+entra na caixa (quando entra, $p=q$ e não há direção para empurrar). Isso é
+garantido por uma regra: \emph{todo deslocamento da câmera é menor que $r$ e a
+colisão é resolvida logo depois de cada deslocamento}. Andando, o maior passo
+é $6\,\text{u/s} \times 0{,}05\,\text{s} = 0{,}3 < 0{,}5$, graças ao passo
+máximo de $\Delta t$; sem ele, um travamento de 1\,s faria a câmera saltar 6
+unidades e atravessar a torre. Com a roda, cada evento move $0{,}4 < 0{,}5$ e a
+colisão é resolvida dentro do próprio callback, porque vários eventos podem
+chegar num mesmo \texttt{poll\_events}.
+
+\paragraph{Seleção pelo clique.} Para descobrir a torre clicada, o cursor é
+levado ao NDC e desprojetado com $(PV)^{-1}$ nos planos near e far (com divisão
+por $w$), o que gera um raio no mundo. O raio é testado contra as mesmas caixas
+pelo método das faixas (\emph{slabs}), e a torre escolhida é a de menor
+parâmetro $t$, isto é, a mais próxima da câmera. A reação é a pontuação: a torre
+troca de lado e o corte é recontado.
+
+% =====================================================================
+\section{Capturas de tela}
+% =====================================================================
+As capturas foram geradas por \arq{relatorio/capturas.py}, que roda o jogo de
+verdade, aciona as teclas pelos mesmos callbacks do jogador e lê o
+\emph{backbuffer} com \texttt{ctx.screen.read()} antes de cada troca de buffers.
+Como a leitura não inclui a decoração da janela, o texto da barra de título no
+instante da captura foi escrito acima de cada imagem. A situação de vitória foi
+preparada pelo script (a partição foi posta a uma inversão da meta) e concluída
+pela regra do jogo (\texttt{inverter\_torre}). No canto superior esquerdo de
+cada imagem está o placar: a barra amarela é a fração de arestas no corte, o
+risco verde é a meta e a barra azul é o tempo restante.
+
+\newcommand{\fig}[2]{\begin{subfigure}[t]{0.48\linewidth}\centering
+  \includegraphics[width=\linewidth]{#1}\caption{#2}\end{subfigure}}
+
+\begin{figure}[H]
+\centering
+\fig{inicio}{Início (\texttt{START}).}\hfill
+\fig{jogando}{Jogo em andamento (\texttt{PLAYING}), câmera livre.}\\[6pt]
+\fig{pausa}{Pausa (\texttt{PAUSED}).}\hfill
+\fig{camera_aerea}{Câmera aérea.}
+\caption{Estados do jogo e os dois modos de câmera.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fig{derrota}{Fim de jogo: derrota (tempo esgotado).}\hfill
+\fig{vitoria}{Fim de jogo: vitória (corte atingiu a meta).}
+\caption{Os dois finais.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fig{luz_direcional}{Só a luz direcional (L1 ligada, L2 desligada).}\hfill
+\fig{luz_pontual}{Só a luz pontual móvel (L1 desligada, L2 ligada).}\\[6pt]
+\fig{texturas}{Objetos texturizados: torre (metal, mapeamento cilíndrico) e piso (repetido).}
+\caption{Cada tipo de fonte de luz e as texturas.}
+\end{figure}
+
+% =====================================================================
+\section{Divisão de tarefas}
+% =====================================================================
+\preencher{Conferir e ajustar: rascunho montado a partir do histórico do git.}
+
+\begin{itemize}
+\item \textbf{Lucas Ataide}: escolha do tema e da mecânica; \arq{grafo.py}
+  (geração do grafo, corte aleatorizado e busca local); \arq{jogo.py} (estado da
+  partida, cronômetro, sorteio de posições, seleção pelo clique e colisão);
+  adaptação de \arq{camera.py} (modos e raio do cursor); \arq{geometria.py};
+  conversão da torre para OFF; em \arq{main.py}, a janela, os callbacks, o laço,
+  os estados, o desenho das arestas e dos anéis e o placar; script de capturas e
+  relatório.
+\item \textbf{Gabriel Frigo}: \arq{renderizador.py} (passadas de desenho, matriz
+  normal, luzes no espaço da câmera, controle do sRGB); \arq{material.py} (luzes e
+  materiais); integração de \arq{malha.py} e \arq{texturas.py}; shaders
+  \arq{cena.vert/.frag} e \arq{linha.vert/.frag}; escolha das texturas;
+  reorganização de \arq{main.py} em torno do renderizador; lista de controles;
+  \arq{Makefile}, \arq{requirements.txt} e \arq{README.md}.
+\end{itemize}
+
+% =====================================================================
+\section{Declaração de uso de IA}
+% =====================================================================
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}llY@{}}
+\toprule
+\textbf{Quem} & \textbf{Ferramenta} & \textbf{Uso} \\
+\midrule
+Lucas & Gemini (Google), em linha de comando &
+Sugestão do tema; explicações de conceitos (DFS aleatorizada, iluminação,
+envelope do shader); revisão do \arq{grafo.py} e do \arq{jogo.py}; código de
+\arq{geometria.py} (piso, cubo, anel, segmento, leitura do OFF), dos modos da
+câmera, de uma versão do \arq{jogo.py} e do desenho das arestas e anéis; conversão OBJ$\to$OFF;
+\arq{.gitignore} e configuração do verificador de tipos; dois guias em PDF
+(iluminação e envelope). \\
+Lucas & Claude (Anthropic), Claude Code &
+Explicações e revisão de código; código da seleção pelo clique (raio do cursor
+e teste raio $\times$ caixa), do placar, da colisão da câmera e dos títulos de
+fim de jogo; resolução de um conflito no git; script de capturas; redação deste
+relatório a partir do código. \\
+Gabriel & \preencher{ferramenta} & \preencher{uso} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Os autores revisaram o material gerado com ajuda de IA e assumem total
+responsabilidade técnica e intelectual por ele.
+
+\end{document}
