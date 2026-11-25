@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import glm
 import grafo
 import math
 import random
@@ -15,7 +16,8 @@ class EstadoJogo:
     def iniciar_fase(self,n):
         self.meta = 0
         self.tam_corte_atual = 1
-        self.tempo_restante = 60.0
+        self.tempo_total = 60.0
+        self.tempo_restante = self.tempo_total
         self.estado = "START"
         self.posicoes = sortear_posicoes(n,self.meio_lado,self.dist_min)
         while self.meta <= self.tam_corte_atual:
@@ -47,6 +49,17 @@ class EstadoJogo:
             if t is not None and t < melhor_t:     # a mais próxima da câmera
                 melhor, melhor_t = u, t
         return melhor
+
+    def empurrar_esfera(self, p: glm.vec3, raio: float, meia_larg: float, altura: float) -> glm.vec3:
+        """Tira a esfera (centro p) de dentro das caixas das torres, do chão e da arena; devolve o novo centro."""
+        for x, y, z in self.posicoes:
+            q = glm.clamp(p, glm.vec3(x - meia_larg, y, z - meia_larg),
+                             glm.vec3(x + meia_larg, y + altura, z + meia_larg))
+            dist = glm.length(p - q)
+            if 0.0 < dist < raio:
+                p = q + (p - q) * (raio / dist)
+        limite = self.meio_lado - raio
+        return glm.clamp(p, glm.vec3(-limite, raio, -limite), glm.vec3(limite, math.inf, limite))
 
 
 def raio_aabb(o, d, bmin, bmax) -> float | None:

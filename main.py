@@ -59,12 +59,32 @@ VERSAO_OPENGL = (4, 0)
 AMOSTRAS_MSAA = 4
 ALTURA_ALVO_MODELO = 4
 DT_MAX = 0.05
+RAIO_CAMERA = 0.5
+MEIA_LARG_TORRE = 0.25 * ALTURA_ALVO_MODELO  # caixa da torre: usada no clique e na colisao
+ALTURA_CAIXA_TORRE = ALTURA_ALVO_MODELO + 0.1
 
 # Cores das primitivas de linha convertidas uma unica vez de sRGB para espaco linear
 COR_COROA_A = srgb_para_linear((0.15, 0.55, 1.00))
 COR_COROA_B = srgb_para_linear((1.00, 0.20, 0.25))
 COR_ARESTA_CORTE = srgb_para_linear((1.00, 0.90, 0.10))
 COR_ARESTA_FORA = srgb_para_linear((0.38, 0.40, 0.45))
+COR_PLACAR_FUNDO = srgb_para_linear((0.15, 0.16, 0.19))
+COR_PLACAR_MOLDURA = srgb_para_linear((0.85, 0.85, 0.85))
+COR_PLACAR_META = srgb_para_linear((0.20, 1.00, 0.40))
+COR_PLACAR_TEMPO = srgb_para_linear((0.30, 0.75, 1.00))
+
+# Layout do placar em pixels (origem no canto inferior esquerdo da janela)
+PLACAR_MARGEM = 20.0
+PLACAR_LARGURA = 300.0
+PLACAR_ALTURA = 18.0
+PLACAR_ESPACO = 12.0
+
+
+def retangulo(x: float, y: float, largura: float, altura: float) -> glm.mat4:
+    """Matriz de modelo que leva o quadrado unitario [0,1]^2 ao retangulo (x, y, largura, altura)."""
+    return glm.translate(glm.mat4(1.0), glm.vec3(x, y, 0.0)) * glm.scale(
+        glm.mat4(1.0), glm.vec3(largura, altura, 1.0)
+    )
 
 
 @dataclass
@@ -116,7 +136,7 @@ def main() -> None:
     ctx.enable(moderngl.DEPTH_TEST)
     ctx.enable(moderngl.CULL_FACE)
 
-    cam = camera.Camera(pos=(0.0, 9.0, 18.0), altura_aerea=28.0)
+    cam = camera.Camera(pos=(0.0, 9.0, 11.0), altura_aerea=28.0)
 
     # Camada grafica desacoplada (fachada unica)
     renderizador = Renderizador(
@@ -156,6 +176,7 @@ def main() -> None:
     vbo_cubo = ctx.buffer(geo.criar_cubo().tobytes())
     vbo_onda = ctx.buffer(geo.criar_onda_eletrica().tobytes())
     vbo_aresta = ctx.buffer(geo.criar_segmento_aresta().tobytes())
+    vbo_quad = ctx.buffer(geo.criar_quad().tobytes())
 
     L = float(estado_jogo.meio_lado)
     I = glm.mat4(1.0)
@@ -172,6 +193,12 @@ def main() -> None:
     def atualizar_titulo() -> None:
         if estado_jogo.estado == "GAME_OVER":
             glfw.set_window_title(janela, "GAME OVER, tente novamente aperte R")
+            return
+        if estado_jogo.estado == "VICTORY":
+            glfw.set_window_title(
+                janela,
+                f"Ganhou! Tente novamente apertando R. Sobrou {estado_jogo.tempo_restante:.1f} segundos.",
+            )
             return
         vsync_txt = "ON" if estado_ctx.vsync else "OFF"
         cull_txt = "ON" if estado_ctx.cull_face else "OFF"
@@ -244,8 +271,8 @@ def main() -> None:
             w, h = glfw.get_window_size(window)
             origem, direcao = cam.raio(mx, my, w, h)
             u = estado_jogo.torre_no_raio(origem, direcao,
-                                          meia_larg=0.25 * ALTURA_ALVO_MODELO,
-                                          altura=ALTURA_ALVO_MODELO + 0.1)
+                                          meia_larg=MEIA_LARG_TORRE,
+                                          altura=ALTURA_CAIXA_TORRE)
             if u is not None:
                 estado_jogo.inverter_torre(u)
                 atualizar_titulo()
@@ -273,6 +300,7 @@ def main() -> None:
 
     def scroll(_window: Any, _xoffset: float, yoffset: float) -> None:
         cam.zoom(yoffset)
+        cam.pos = estado_jogo.empurrar_esfera(cam.pos, RAIO_CAMERA, MEIA_LARG_TORRE, ALTURA_CAIXA_TORRE)
 
     glfw.set_key_callback(janela, tecla)
     glfw.set_mouse_button_callback(janela, mouse)
@@ -324,6 +352,7 @@ def main() -> None:
             vertical *= pode_mover
 
             cam.mover(avancar, lateral, dt, vertical)
+            cam.pos = estado_jogo.empurrar_esfera(cam.pos, RAIO_CAMERA, MEIA_LARG_TORRE, ALTURA_CAIXA_TORRE)
             estado_jogo.atualizar(dt)
 
             V = cam.visao()
@@ -384,6 +413,36 @@ def main() -> None:
                         seed=float(u * 17 + v),
                     )
 
+            # ---- placar: 2a passada, ortografica em pixels e sem teste de profundidade ----
+            larg_tela, alt_tela = glfw.get_framebuffer_size(janela)
+            renderizador.iniciar_placar_2d(larg_tela, alt_tela)
+
+            m_arestas = max(1, estado_jogo.graph.m)
+            frac_corte = estado_jogo.tam_corte_atual / m_arestas
+            frac_meta = estado_jogo.meta / m_arestas
+            frac_tempo = estado_jogo.tempo_restante / estado_jogo.tempo_total
+
+            x = PLACAR_MARGEM
+            y_corte = alt_tela - PLACAR_MARGEM - PLACAR_ALTURA
+            y_tempo = y_corte - PLACAR_ESPACO - PLACAR_ALTURA
+
+            for y, frac, cor in (
+                (y_corte, frac_corte, COR_ARESTA_CORTE),
+                (y_tempo, frac_tempo, COR_PLACAR_TEMPO),
+            ):
+                barra = retangulo(x, y, PLACAR_LARGURA, PLACAR_ALTURA)
+                cheio = retangulo(x, y, PLACAR_LARGURA * frac, PLACAR_ALTURA)
+                renderizador.desenhar_placar_2d(vbo_quad, barra, COR_PLACAR_FUNDO, moderngl.TRIANGLE_FAN)
+                renderizador.desenhar_placar_2d(vbo_quad, cheio, cor, moderngl.TRIANGLE_FAN)
+                renderizador.desenhar_placar_2d(vbo_quad, barra, COR_PLACAR_MOLDURA, moderngl.LINE_LOOP)
+
+            # marca da meta: risco vertical um pouco mais alto que a barra do corte
+            x_meta = x + PLACAR_LARGURA * frac_meta
+            marca = retangulo(x_meta - 1.5, y_corte - 4.0, 3.0, PLACAR_ALTURA + 8.0)
+            renderizador.desenhar_placar_2d(vbo_quad, marca, COR_PLACAR_META, moderngl.TRIANGLE_FAN)
+
+            renderizador.finalizar_placar_2d()
+
             glfw.swap_buffers(janela)
             glfw.poll_events()
     finally:
@@ -394,6 +453,7 @@ def main() -> None:
         vbo_cubo.release()
         vbo_onda.release()
         vbo_aresta.release()
+        vbo_quad.release()
         glfw.terminate()
         print("Execucao finalizada.")
 

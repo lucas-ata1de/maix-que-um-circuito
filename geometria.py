@@ -99,3 +99,14 @@ def criar_segmento_aresta(subdivisoes: int = 16) -> np.ndarray:
     z = np.linspace(0.0, 1.0, max(2, subdivisoes), dtype="f4")
     zeros = np.zeros_like(z)
     return np.column_stack((zeros, zeros, z)).astype("f4")
+
+
+def criar_quad() -> np.ndarray:
+    """Quadrado unitario [0, 1]^2 no plano z = 0, em ordem anti-horaria (formato '3f').
+
+    Os mesmos 4 vertices servem para TRIANGLE_FAN (preenchido) e LINE_LOOP (contorno).
+    """
+    return np.array(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
+        dtype="f4",
+    )
