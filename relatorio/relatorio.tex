@@ -299,12 +299,12 @@ todos os vetores no mesmo espaço (o da câmera).
 \toprule
 \textbf{Imagem} & \textbf{Objeto} & \textbf{Fonte e licença} \\
 \midrule
-\arq{rubber\_tiles\_diff\_1k.jpg} & piso & Poly Haven, ``Rubber Tiles'', \url{https://polyhaven.com/a/rubber_tiles}, CC0 \\
-\arq{rusty\_metal\_04\_diff\_1k.jpg} & torres & Poly Haven, ``Rusty Metal 04'', \url{https://polyhaven.com/a/rusty_metal_04}, CC0 \\
-\arq{white\_stucco\_02\_diff\_1k.jpg} & bordas & Poly Haven, ``White Stucco 02'', \url{https://polyhaven.com/a/white_stucco_02}, CC0 \\
+\arq{rubber\_tiles\_diff\_1k.jpg} & piso & Poly Haven, ``Rubber Tiles'', \url{https://polyhaven.com/a/rubber_tiles}, CC0 1.0 Universal (Domínio Público) \\
+\arq{rusty\_metal\_04\_diff\_1k.jpg} & torres & Poly Haven, ``Rusty Metal 04'', \url{https://polyhaven.com/a/rusty_metal_04}, CC0 1.0 Universal (Domínio Público) \\
+\arq{white\_stucco\_02\_diff\_1k.jpg} & bordas & Poly Haven, ``White Stucco 02'', \url{https://polyhaven.com/a/white_stucco_02}, CC0 1.0 Universal (Domínio Público) \\
 \bottomrule
 \end{tabularx}
-\caption{Texturas de cor (mapas difusos de $1024\times1024$).}
+\caption{Texturas de cor (mapas difusos de $1024\times1024$). Todas as texturas do Poly Haven são distribuídas sob licença CC0 1.0 Universal (\url{https://polyhaven.com/license}).}
 \end{table}
 
 \paragraph{Coordenadas de textura.} No \textbf{piso}, são geradas junto com a
@@ -428,8 +428,11 @@ risco verde é a meta e a barra azul é o tempo restante.
 \item \textbf{Gabriel Frigo}: \arq{renderizador.py} (passadas de desenho, matriz
   normal, luzes no espaço da câmera, controle do sRGB); \arq{material.py} (luzes e
   materiais); integração de \arq{malha.py} e \arq{texturas.py}; shaders
-  \arq{cena.vert/.frag} e \arq{linha.vert/.frag}; luzes dos choques (fontes locais nas torres e lineares nas arestas, teclas 3 a 5); escolha das texturas do Poly Haven, incluindo a das bordas;
-  reorganização de \arq{main.py} em torno do renderizador; lista de controles;
+  \arq{cena.vert/.frag} e \arq{linha.vert/.frag}; luzes dos choques (fontes locais
+  nas torres e lineares nas arestas, teclas 3 a 5) e calibração da iluminação e dos
+  materiais; escolha e integração das texturas do Poly Haven, incluindo a das
+  bordas; reorganização de \arq{main.py} em torno do renderizador, resolução de
+  conflito de merge e limpeza de código/comentários; lista de controles;
   \arq{Makefile}, \arq{requirements.txt} e \arq{README.md}.
 \end{itemize}
 
@@ -454,7 +457,20 @@ Explicações e revisão de código; código da seleção pelo clique (raio do c
 e teste raio $\times$ caixa), do placar, da colisão da câmera e dos títulos de
 fim de jogo; resolução de um conflito no git; script de capturas; redação deste
 relatório a partir do código. \\
-Gabriel & Gemini (Google) & \preencher{uso} \\
+Gabriel & Gemini (Google) &
+Análise de código morto, bugs e verificação de requisitos do enunciado;
+implementação da camada gráfica a partir das especificações do projeto:
+\arq{renderizador.py} (fachada OpenGL 4.0 Core, cache de VAOs, matriz normal,
+luzes no espaço da câmera e controle de sRGB), shaders \arq{cena.vert/.frag} e
+integração de \arq{linha.vert/.frag}, adaptação de \arq{material.py}, integração
+de \arq{malha.py} em \arq{geometria.py} e reorganização de \arq{main.py} e
+\arq{Makefile}; implementação das luzes dos choques (fontes pontuais locais nas
+torres e lineares nas arestas, com atenuação de alcance finito e teclas
+\tecla{3} a \tecla{5}); integração das texturas do Poly Haven (incluindo
+\texttt{u\_uv\_escala} nas bordas), diagnóstico e calibração das intensidades de
+luz e dos materiais; padronização de comentários para docstrings; resolução de
+conflito de merge em \arq{main.py}; confirmação das licenças das texturas e
+preenchimento desta declaração no relatório. \\
 \bottomrule
 \end{tabularx}
 \end{table}
