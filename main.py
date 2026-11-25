@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import glfw
+import math
 import glm
 import moderngl
 import numpy as np
@@ -87,6 +88,16 @@ def main() -> None:
 
     vbo_cubo = ctx.buffer(geo.criar_cubo().tobytes())
     vao_cubo = ctx.vertex_array(prog, [(vbo_cubo, "3f 3f 2x4", "vPosition", "vNorm")])
+    
+    prog_linha = ctx.program(
+        vertex_shader=(SHADERS / "linha.vert").read_text(encoding="utf-8"),
+        fragment_shader=(SHADERS / "linha.frag").read_text(encoding="utf-8"),
+    )
+    vbo_onda = ctx.buffer(geo.criar_onda_eletrica().tobytes())
+    vao_onda = ctx.vertex_array(prog_linha, [(vbo_onda, "3f", "vPosition")])
+
+    vbo_aresta = ctx.buffer(geo.criar_segmento_aresta().tobytes())
+    vao_aresta = ctx.vertex_array(prog_linha, [(vbo_aresta, "3f", "vPosition")])
 
     L = estado_jogo.meio_lado
     I = glm.mat4(1.0)
@@ -184,6 +195,7 @@ def main() -> None:
 
     atualizar_titulo()
     t_ant = glfw.get_time()
+    tempo_anim=0.0
 
     while not glfw.window_should_close(janela):
         ctx.clear(*FUNDO)
@@ -191,6 +203,8 @@ def main() -> None:
         dt_real = agora - t_ant
         t_ant = agora
         dt = min(DT_MAX, dt_real)
+        if estado_jogo.estado != "PAUSED":
+            tempo_anim += dt
 
         estado_ctx.frames += 1
         estado_ctx.tempo_acum += dt_real
@@ -230,6 +244,45 @@ def main() -> None:
             prog["u_modelo"].write(m_torre.to_bytes())
             vao_torre.render(moderngl.TRIANGLES)
 
+        # ---- linhas: outro programa, então visão/projeção vão de novo ----
+        prog_linha["u_visao"].write(cam.visao().to_bytes())
+        prog_linha["u_projecao"].write(cam.projecao().to_bytes())
+        prog_linha["u_tempo"].value = tempo_anim
+
+        # coroas girando no topo (u_amp = 0: o shader não entorta a onda)
+        prog_linha["u_amp"].value = 0.0
+        prog_linha["u_vel"].value = 0.0
+        prog_linha["u_seed"].value = 0.0
+        for u, (x, y, z) in enumerate(estado_jogo.posicoes):
+            cor = (0.15, 0.55, 1.0) if estado_jogo.graph.X[u] == 0 else (1.0, 0.20, 0.25)
+            m_onda = (glm.translate(I, glm.vec3(x, y + ALTURA_ALVO_MODELO, z))
+                * glm.rotate(I, tempo_anim * 2.2 + u * 0.7, glm.vec3(0, 1, 0)))
+            prog_linha["u_cor"].value = cor
+            prog_linha["u_modelo"].write(m_onda.to_bytes())
+            vao_onda.render(moderngl.LINE_LOOP)
+
+        # arestas: segmento (0,0,0)->(0,0,1) girado em Y e esticado em Z até ir de A a B
+        for u in range(estado_jogo.n):
+            ax, ay, az = estado_jogo.posicoes[u]
+            A = glm.vec3(ax, ay + ALTURA_ALVO_MODELO, az)
+            for v in estado_jogo.graph.adj[u]:
+                if u >= v:          # cada aresta aparece em adj[u] e adj[v]; desenha uma vez só
+                    continue
+                bx, by, bz = estado_jogo.posicoes[v]
+                d = glm.vec3(bx, by + ALTURA_ALVO_MODELO, bz) - A
+                comp = glm.length(d)
+                if comp < 1e-5:
+                    continue
+                m_aresta = (glm.translate(I, A)
+                    * glm.rotate(I, math.atan2(d.x, d.z), glm.vec3(0, 1, 0))
+                    *glm.scale(I, glm.vec3(1.0, 1.0, comp)))
+                no_corte = estado_jogo.graph.ta_no_corte(u, v)
+                prog_linha["u_cor"].value = (1.0, 0.90, 0.10) if no_corte else (0.38, 0.40, 0.45)
+                prog_linha["u_amp"].value = 0.12 if no_corte else 0.03
+                prog_linha["u_vel"].value = 18.0 if no_corte else 5.0
+                prog_linha["u_seed"].value = float(u * 17 + v)
+                prog_linha["u_modelo"].write(m_aresta.to_bytes())
+                vao_aresta.render(moderngl.LINE_STRIP)
 
         glfw.swap_buffers(janela)
         glfw.poll_events()

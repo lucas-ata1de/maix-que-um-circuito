@@ -99,7 +99,7 @@ def criar_onda_eletrica(raio: float = 0.35, amp: float = 0.06, picos: int = 6, p
     return np.column_stack((x, y, z)).astype("f4")
 
 
-def criar_segmento_aresta(subdivisoes: int = 16) -> np.ndarray:
+def criar_segmento_aresta(subdivisoes: int = 2) -> np.ndarray:
     """Segmento unitario de (0,0,0) ate (0,0,1) para LINE_STRIP (formato '3f')."""
     z = np.linspace(0.0, 1.0, subdivisoes, dtype="f4")
     zeros = np.zeros_like(z)
