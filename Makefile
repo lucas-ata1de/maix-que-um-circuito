@@ -8,7 +8,7 @@ MAKEFLAGS += --no-print-directory -s
 # ----------------------------------------------------------------
 
 PYTHON != [ -x ".venv/bin/python" ] && echo ".venv/bin/python -B" || echo "python3 -B"
-PACKAGES = moderngl glfw PyGLM numpy
+PACKAGES = moderngl glfw PyGLM numpy Pillow
 DEV_PACKAGES = ruff pyright
 
 export PYTHONDONTWRITEBYTECODE = 1
@@ -33,7 +33,7 @@ help:
 	cmd "release"        "Executa o jogo em modo Release (--release)"; \
 	sec "Ambiente & Dependências:"; \
 	cmd "venv, setup"    "Cria .venv isolada (uv ou python3 -m venv) e instala pacotes"; \
-	cmd "install"        "Instala os pacotes necessários (moderngl, glfw, PyGLM, numpy)"; \
+	cmd "install"        "Instala os pacotes necessários (moderngl, glfw, PyGLM, numpy, Pillow)"; \
 	cmd "install-dev"    "Instala também ferramentas de análise (ruff, pyright)"; \
 	sec "Testes & Qualidade:"; \
 	cmd "test"           "Executa a validação dos módulos (grafo.py e camera.py)"; \

@@ -1,20 +1,56 @@
-"""Ponto de entrada da aplicação 3D 'Maix que um Circuito' em ModernGL."""
+"""Maix que um Circuito — Jogo 3D interativo em OpenGL 4.0 Core / ModernGL.
+
+Execucao:
+    python main.py
+    (ou via Makefile: `make setup && make run`)
+
+Controles de Teclado:
+    W / A / S / D       Movimentacao horizontal da camera (modo livre)
+    Espaco / L-Shift    Subir / descer a camera (modo livre)
+    T                   Alternar modo de camera ('livre' <-> 'aerea')
+    1                   Ligar / desligar luz direcional
+    2                   Ligar / desligar luz pontual movel (orbitante)
+    Y                   Ligar / desligar VSync (FPS exibido na barra de titulo)
+    C / V               Desativar / ativar descarte de faces traseiras (CULL_FACE)
+    Enter               Iniciar partida (a partir do estado START)
+    P                   Pausar / retomar partida (congela animacoes e tempo)
+    R                   Reiniciar fase com novo grafo aleatorio
+    Esc                 Fechar janela
+
+Controles de Mouse:
+    Botao Direito + Arrastar   Girar orientacao da camera (yaw/pitch no modo livre)
+    Roda do Mouse (Scroll)     Zoom (aproximar/afastar nos modos livre e aereo)
+"""
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any
 
 import glfw
-import math
 import glm
 import moderngl
-import numpy as np
-import geometria as geo
-import camera
-import jogo
 
-SHADERS = Path(__file__).parent / "shaders"
-CAMINHO = Path(__file__).parent / "modelos" / "torre.off"
+import camera
+import geometria as geo
+import jogo
+from material import (
+    CenaLuzes,
+    LuzDirecional,
+    LuzPontual,
+    MAT_PEDESTAL,
+    MAT_PISO,
+    MAT_TORRE_A,
+    MAT_TORRE_B,
+    srgb_para_linear,
+)
+from renderizador import Renderizador
+
+RAIZ = Path(__file__).parent
+SHADERS = RAIZ / "shaders"
+TEXTURAS = RAIZ / "texturas"
+CAMINHO_TORRE = RAIZ / "modelos" / "torre.off"
+
 TITULO_JANELA = "Maix que um Circuito"
 LADO = 700
 FUNDO = (0.10, 0.11, 0.13, 1.0)
@@ -24,14 +60,21 @@ AMOSTRAS_MSAA = 4
 ALTURA_ALVO_MODELO = 1.8
 DT_MAX = 0.05
 
+# Cores das primitivas de linha convertidas uma unica vez de sRGB para espaco linear
+COR_COROA_A = srgb_para_linear((0.15, 0.55, 1.00))
+COR_COROA_B = srgb_para_linear((1.00, 0.20, 0.25))
+COR_ARESTA_CORTE = srgb_para_linear((1.00, 0.90, 0.10))
+COR_ARESTA_FORA = srgb_para_linear((0.38, 0.40, 0.45))
+
 
 @dataclass
 class EstadoMouse:
-    """Armazena o estado de arrasto do botão direito para rotação da câmera."""
+    """Armazena o estado de arrasto do botao direito para rotacao da camera."""
 
     girando: bool = False
     ultimo_x: float | None = None
     ultimo_y: float | None = None
+
 
 @dataclass
 class EstadoCTX:
@@ -45,21 +88,22 @@ class EstadoCTX:
 
 
 def main() -> None:
-    """Inicializa GLFW/ModernGL, carrega a torre e executa o laço principal."""
+    """Inicializa GLFW/ModernGL, carrega geometrias/texturas e executa o laco principal."""
     if not glfw.init():
-        raise RuntimeError("Não foi possível inicializar o GLFW.")
+        raise RuntimeError("Nao foi possivel inicializar o GLFW.")
 
     glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, VERSAO_OPENGL[0])
     glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, VERSAO_OPENGL[1])
     glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
     glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
     glfw.window_hint(glfw.SAMPLES, AMOSTRAS_MSAA)
+    glfw.window_hint(glfw.SRGB_CAPABLE, glfw.TRUE)
     glfw.window_hint(glfw.RESIZABLE, True)
 
     janela = glfw.create_window(LADO, LADO, TITULO_JANELA, None, None)
     if janela is None:
         glfw.terminate()
-        raise RuntimeError("Não foi possível criar a janela GLFW.")
+        raise RuntimeError("Nao foi possivel criar a janela GLFW.")
 
     estado_mouse = EstadoMouse()
     estado_ctx = EstadoCTX()
@@ -72,36 +116,52 @@ def main() -> None:
     ctx.enable(moderngl.DEPTH_TEST)
     ctx.enable(moderngl.CULL_FACE)
 
-    cam = camera.Camera(pos=(0.0,9.0,18.0),altura_aerea=28)
-    dados,  m_enq = geo.carregar_off(CAMINHO)
+    cam = camera.Camera(pos=(0.0, 9.0, 18.0), altura_aerea=28.0)
 
-    prog = ctx.program(
-        vertex_shader=(SHADERS / "shader.vert").read_text(encoding="utf-8"),
-        fragment_shader=(SHADERS / "shader.frag").read_text(encoding="utf-8"),
+    # Camada grafica desacoplada (fachada unica)
+    renderizador = Renderizador(
+        ctx,
+        pasta_shaders=SHADERS,
+        usar_framebuffer_srgb=True,
+    )
+    renderizador.carregar_textura("piso", TEXTURAS / "piso_circuito.png", repetir=True)
+    renderizador.carregar_textura(
+        "metal_torre",
+        TEXTURAS / "metal_torre.png",
+        repetir=True,
     )
 
-    vbo_torre = ctx.buffer(dados.tobytes())
-    vao_torre = ctx.vertex_array(prog, [(vbo_torre, "3f 3f 2x4", "vPosition", "vNorm")])
+    luz_movel = LuzPontual(
+        posicao=glm.vec3(8.0, 4.0, 0.0),
+        cor=glm.vec3(1.80, 1.40, 0.85),
+        fator_amb=0.08,
+        kc=1.0,
+        kl=0.05,
+        kq=0.012,
+    )
+    cena_luzes = CenaLuzes(
+        direcional=LuzDirecional(),
+        pontuais=[luz_movel],
+    )
 
-    vbo_piso = ctx.buffer(geo.criar_piso(estado_jogo.meio_lado).tobytes())
-    vao_piso = ctx.vertex_array(prog, [(vbo_piso, "3f 3f 2x4", "vPosition", "vNorm")])
+    # VBOs e IBO criados uma unica vez na inicializacao
+    dados_torre, indices_torre, m_enq = geo.carregar_off(
+        CAMINHO_TORRE,
+        altura_alvo=ALTURA_ALVO_MODELO,
+    )
+    vbo_torre = ctx.buffer(dados_torre.tobytes())
+    ibo_torre = ctx.buffer(indices_torre.tobytes())
 
+    vbo_piso = ctx.buffer(geo.criar_piso(estado_jogo.meio_lado, rep=12.0).tobytes())
     vbo_cubo = ctx.buffer(geo.criar_cubo().tobytes())
-    vao_cubo = ctx.vertex_array(prog, [(vbo_cubo, "3f 3f 2x4", "vPosition", "vNorm")])
-    
-    prog_linha = ctx.program(
-        vertex_shader=(SHADERS / "linha.vert").read_text(encoding="utf-8"),
-        fragment_shader=(SHADERS / "linha.frag").read_text(encoding="utf-8"),
-    )
     vbo_onda = ctx.buffer(geo.criar_onda_eletrica().tobytes())
-    vao_onda = ctx.vertex_array(prog_linha, [(vbo_onda, "3f", "vPosition")])
-
     vbo_aresta = ctx.buffer(geo.criar_segmento_aresta().tobytes())
-    vao_aresta = ctx.vertex_array(prog_linha, [(vbo_aresta, "3f", "vPosition")])
 
-    L = estado_jogo.meio_lado
+    L = float(estado_jogo.meio_lado)
     I = glm.mat4(1.0)
 
+    # Barreiras da arena construidas com escala nao uniforme a partir do cubo unitario
+    # (evidenciam a Matriz Normal e a textura branca 1x1 Null Object)
     bordas = [
         glm.translate(I, glm.vec3(0.0, 0.2,  L)) * glm.scale(I, glm.vec3(2 * L + 0.4, 0.4, 0.4)),
         glm.translate(I, glm.vec3(0.0, 0.2, -L)) * glm.scale(I, glm.vec3(2 * L + 0.4, 0.4, 0.4)),
@@ -112,11 +172,16 @@ def main() -> None:
     def atualizar_titulo() -> None:
         vsync_txt = "ON" if estado_ctx.vsync else "OFF"
         cull_txt = "ON" if estado_ctx.cull_face else "OFF"
-        cam_txt = getattr(cam, "modo", "?")
+        l1_txt = "ON" if cena_luzes.direcional.ativa else "OFF"
+        l2_txt = "ON" if luz_movel.ativa else "OFF"
+        m_arestas = max(1, estado_jogo.graph.m)
         titulo = (
-
             f"{TITULO_JANELA} | {estado_ctx.fps:6.1f} FPS"
-            f" | VSync: {vsync_txt} | Corte Atual: {estado_jogo.tam_corte_atual / estado_jogo.graph.m:.0%} Meta: {estado_jogo.meta / estado_jogo.graph.m:.0%} | {estado_jogo.tempo_restante:4.1f}s"
+            f" | VSync:{vsync_txt} | Cam:{cam.modo} | Cull:{cull_txt}"
+            f" | L1:{l1_txt} L2:{l2_txt} | {estado_jogo.estado}"
+            f" | Corte:{estado_jogo.tam_corte_atual / m_arestas:.0%}"
+            f" Meta:{estado_jogo.meta / m_arestas:.0%}"
+            f" | {estado_jogo.tempo_restante:4.1f}s"
         )
         glfw.set_window_title(janela, titulo)
 
@@ -137,6 +202,12 @@ def main() -> None:
             return
         if key == glfw.KEY_ESCAPE:
             glfw.set_window_should_close(window, True)
+        elif key == glfw.KEY_1:
+            cena_luzes.direcional.ativa = not cena_luzes.direcional.ativa
+            atualizar_titulo()
+        elif key == glfw.KEY_2:
+            luz_movel.ativa = not luz_movel.ativa
+            atualizar_titulo()
         elif key == glfw.KEY_C:
             ctx.disable(moderngl.CULL_FACE)
             estado_ctx.cull_face = False
@@ -156,10 +227,13 @@ def main() -> None:
             atualizar_titulo()
         elif key == glfw.KEY_ENTER and estado_jogo.estado == "START":
             estado_jogo.estado = "PLAYING"
-        elif key == glfw.KEY_P and estado_jogo.estado in ("PAUSED","PLAYING"):
+            atualizar_titulo()
+        elif key == glfw.KEY_P and estado_jogo.estado in ("PAUSED", "PLAYING"):
             estado_jogo.estado = "PAUSED" if estado_jogo.estado == "PLAYING" else "PLAYING"
+            atualizar_titulo()
         elif key == glfw.KEY_R:
             estado_jogo.iniciar_fase(estado_jogo.n)
+            atualizar_titulo()
 
     def mouse(window: Any, button: int, action: int, _mods: int) -> None:
         if button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS:
@@ -204,103 +278,119 @@ def main() -> None:
 
     atualizar_titulo()
     t_ant = glfw.get_time()
-    tempo_anim=0.0
+    tempo_anim = 0.0
+    raio_orbita = 8.0
 
-    while not glfw.window_should_close(janela):
-        ctx.clear(*FUNDO)
-        agora = glfw.get_time()
-        dt_real = agora - t_ant
-        t_ant = agora
-        dt = min(DT_MAX, dt_real)
-        if estado_jogo.estado != "PAUSED":
-            tempo_anim += dt
+    try:
+        while not glfw.window_should_close(janela):
+            agora = glfw.get_time()
+            dt_real = agora - t_ant
+            t_ant = agora
+            dt = min(DT_MAX, dt_real)
 
-        estado_ctx.frames += 1
-        estado_ctx.tempo_acum += dt_real
-        if estado_ctx.tempo_acum >= INTERVALO_FPS:
-            estado_ctx.fps = estado_ctx.frames / estado_ctx.tempo_acum
-            estado_ctx.frames = 0
-            estado_ctx.tempo_acum = 0.0
-            atualizar_titulo()
+            if estado_jogo.estado != "PAUSED":
+                tempo_anim += dt
+                luz_movel.posicao = glm.vec3(
+                    raio_orbita * math.cos(tempo_anim * 0.8),
+                    4.0 + 0.6 * math.sin(tempo_anim * 1.6),
+                    raio_orbita * math.sin(tempo_anim * 0.8),
+                )
 
-        avancar = float(glfw.get_key(janela, glfw.KEY_W) == glfw.PRESS) - float(
-            glfw.get_key(janela, glfw.KEY_S) == glfw.PRESS
-        )
-        lateral = float(glfw.get_key(janela, glfw.KEY_D) == glfw.PRESS) - float(
-            glfw.get_key(janela, glfw.KEY_A) == glfw.PRESS
-        )
-        vertical = float(glfw.get_key(janela, glfw.KEY_SPACE) == glfw.PRESS) - float(
-            glfw.get_key(janela, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
-        )
-        avancar *= int(estado_jogo.estado in ("START","PLAYING"))
-        lateral *= int(estado_jogo.estado in ("START","PLAYING"))
-        vertical *= int(estado_jogo.estado in ("START","PLAYING"))
+            estado_ctx.frames += 1
+            estado_ctx.tempo_acum += dt_real
+            if estado_ctx.tempo_acum >= INTERVALO_FPS:
+                estado_ctx.fps = estado_ctx.frames / estado_ctx.tempo_acum
+                estado_ctx.frames = 0
+                estado_ctx.tempo_acum = 0.0
+                atualizar_titulo()
 
-        cam.mover(avancar, lateral, dt, vertical)
-        estado_jogo.atualizar(dt)
-        
-        #projeto e renderiza a camera
-        prog["u_visao"].write(cam.visao().to_bytes())
-        prog["u_projecao"].write(cam.projecao().to_bytes())
-        prog["u_modelo"].write(I.to_bytes())
-        vao_piso.render(moderngl.TRIANGLES)
+            avancar = float(glfw.get_key(janela, glfw.KEY_W) == glfw.PRESS) - float(
+                glfw.get_key(janela, glfw.KEY_S) == glfw.PRESS
+            )
+            lateral = float(glfw.get_key(janela, glfw.KEY_D) == glfw.PRESS) - float(
+                glfw.get_key(janela, glfw.KEY_A) == glfw.PRESS
+            )
+            vertical = float(glfw.get_key(janela, glfw.KEY_SPACE) == glfw.PRESS) - float(
+                glfw.get_key(janela, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
+            )
+            pode_mover = int(estado_jogo.estado in ("START", "PLAYING"))
+            avancar *= pode_mover
+            lateral *= pode_mover
+            vertical *= pode_mover
 
-        #projeto e renderiza cubicos
-        for m_borda in bordas:
-            prog["u_modelo"].write(m_borda.to_bytes())
-            vao_cubo.render(moderngl.TRIANGLES)
+            cam.mover(avancar, lateral, dt, vertical)
+            estado_jogo.atualizar(dt)
 
-        #projeto e renderiza torres
-        for x, y, z in estado_jogo.posicoes:
-            m_torre = glm.translate(I, glm.vec3(x, y, z)) * m_enq
-            prog["u_modelo"].write(m_torre.to_bytes())
-            vao_torre.render(moderngl.TRIANGLES)
+            V = cam.visao()
+            P = cam.projecao()
 
-        # ---- linhas: outro programa, então visão/projeção vão de novo ----
-        prog_linha["u_visao"].write(cam.visao().to_bytes())
-        prog_linha["u_projecao"].write(cam.projecao().to_bytes())
-        prog_linha["u_tempo"].value = tempo_anim
+            renderizador.limpar_tela(FUNDO)
 
-        # coroas girando no topo (u_amp = 0: o shader não entorta a onda)
-        prog_linha["u_amp"].value = 0.0
-        prog_linha["u_vel"].value = 0.0
-        prog_linha["u_seed"].value = 0.0
-        for u, (x, y, z) in enumerate(estado_jogo.posicoes):
-            cor = (0.15, 0.55, 1.0) if estado_jogo.graph.X[u] == 0 else (1.0, 0.20, 0.25)
-            m_onda = (glm.translate(I, glm.vec3(x, y + ALTURA_ALVO_MODELO, z))
-                * glm.rotate(I, tempo_anim * 2.2 + u * 0.7, glm.vec3(0, 1, 0)))
-            prog_linha["u_cor"].value = cor
-            prog_linha["u_modelo"].write(m_onda.to_bytes())
-            vao_onda.render(moderngl.LINE_LOOP)
+            renderizador.iniciar_cena_3d(V, P, cena_luzes)
+            renderizador.desenhar_objeto(vbo_piso, MAT_PISO, I)
 
-        # arestas: segmento (0,0,0)->(0,0,1) girado em Y e esticado em Z até ir de A a B
-        for u in range(estado_jogo.n):
-            ax, ay, az = estado_jogo.posicoes[u]
-            A = glm.vec3(ax, ay + ALTURA_ALVO_MODELO, az)
-            for v in estado_jogo.graph.adj[u]:
-                if u >= v:          # cada aresta aparece em adj[u] e adj[v]; desenha uma vez só
-                    continue
-                bx, by, bz = estado_jogo.posicoes[v]
-                d = glm.vec3(bx, by + ALTURA_ALVO_MODELO, bz) - A
-                comp = glm.length(d)
-                if comp < 1e-5:
-                    continue
-                m_aresta = (glm.translate(I, A)
-                    * glm.rotate(I, math.atan2(d.x, d.z), glm.vec3(0, 1, 0))
-                    *glm.scale(I, glm.vec3(1.0, 1.0, comp)))
-                no_corte = estado_jogo.graph.ta_no_corte(u, v)
-                prog_linha["u_cor"].value = (1.0, 0.90, 0.10) if no_corte else (0.38, 0.40, 0.45)
-                prog_linha["u_amp"].value = 0.2 if no_corte else 0.03
-                prog_linha["u_vel"].value = 20.0 if no_corte else 5.0
-                prog_linha["u_seed"].value = float(u * 17 + v)
-                prog_linha["u_modelo"].write(m_aresta.to_bytes())
-                vao_aresta.render(moderngl.LINE_STRIP)
+            for m_borda in bordas:
+                renderizador.desenhar_objeto(vbo_cubo, MAT_PEDESTAL, m_borda)
 
-        glfw.swap_buffers(janela)
-        glfw.poll_events()
+            for u, (x, y, z) in enumerate(estado_jogo.posicoes):
+                m_torre = glm.translate(I, glm.vec3(x, y, z)) * m_enq
+                mat_torre = MAT_TORRE_A if estado_jogo.graph.X[u] == 0 else MAT_TORRE_B
+                renderizador.desenhar_objeto(vbo_torre, mat_torre, m_torre, ibo=ibo_torre)
 
-    glfw.terminate()
-    print("Execução finalizada.")
+            renderizador.iniciar_linhas_3d(V, P, tempo=tempo_anim)
+
+            for u, (x, y, z) in enumerate(estado_jogo.posicoes):
+                cor_coroa = COR_COROA_A if estado_jogo.graph.X[u] == 0 else COR_COROA_B
+                m_onda = (
+                    glm.translate(I, glm.vec3(x, y + ALTURA_ALVO_MODELO, z))
+                    * glm.rotate(I, tempo_anim * 2.2 + u * 0.7, glm.vec3(0.0, 1.0, 0.0))
+                )
+                renderizador.desenhar_linha(
+                    vbo_onda,
+                    m_onda,
+                    cor_coroa,
+                    modo=moderngl.LINE_LOOP,
+                )
+
+            for u in range(estado_jogo.n):
+                ax, ay, az = estado_jogo.posicoes[u]
+                p_a = glm.vec3(ax, ay + ALTURA_ALVO_MODELO, az)
+                for v in estado_jogo.graph.adj[u]:
+                    if u >= v:
+                        continue
+                    bx, by, bz = estado_jogo.posicoes[v]
+                    delta = glm.vec3(bx, by + ALTURA_ALVO_MODELO, bz) - p_a
+                    comp = glm.length(delta)
+                    if comp < 1e-5:
+                        continue
+                    m_aresta = (
+                        glm.translate(I, p_a)
+                        * glm.rotate(I, math.atan2(delta.x, delta.z), glm.vec3(0.0, 1.0, 0.0))
+                        * glm.scale(I, glm.vec3(1.0, 1.0, comp))
+                    )
+                    no_corte = estado_jogo.graph.ta_no_corte(u, v)
+                    renderizador.desenhar_linha(
+                        vbo_aresta,
+                        m_aresta,
+                        COR_ARESTA_CORTE if no_corte else COR_ARESTA_FORA,
+                        modo=moderngl.LINE_STRIP,
+                        amp=0.12 if no_corte else 0.03,
+                        vel=18.0 if no_corte else 5.0,
+                        seed=float(u * 17 + v),
+                    )
+
+            glfw.swap_buffers(janela)
+            glfw.poll_events()
+    finally:
+        renderizador.liberar()
+        vbo_torre.release()
+        ibo_torre.release()
+        vbo_piso.release()
+        vbo_cubo.release()
+        vbo_onda.release()
+        vbo_aresta.release()
+        glfw.terminate()
+        print("Execucao finalizada.")
 
 
 if __name__ == "__main__":

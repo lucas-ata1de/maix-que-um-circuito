@@ -1,4 +1,5 @@
-moderngl>=5.8.2
-glfw>=2.6.2
-PyGLM>=2.7.1
-numpy>=1.24.0
+glfw
+moderngl
+numpy
+PyGLM
+Pillow

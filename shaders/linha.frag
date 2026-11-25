@@ -1,7 +1,20 @@
 #version 400 core
-uniform vec3 u_cor;
-out vec4 outfragcolor;
+
+uniform vec4 u_cor;            // cor em espaco linear (RGBA)
+uniform int u_codificar_srgb;  // 0 = GL_FRAMEBUFFER_SRGB; 1 = codifica aqui
+
+out vec4 frag_color;
+
+vec3 linear_para_srgb(vec3 c) {
+    vec3 limpo = max(c, vec3(0.0));
+    vec3 baixo = 12.92 * limpo;
+    vec3 alto = 1.055 * pow(limpo, vec3(1.0 / 2.4)) - 0.055;
+    return mix(baixo, alto, step(vec3(0.0031308), limpo));
+}
 
 void main() {
-    outfragcolor = vec4(u_cor, 1.0);
+    vec3 rgb = (u_codificar_srgb != 0)
+        ? linear_para_srgb(u_cor.rgb)
+        : u_cor.rgb;
+    frag_color = vec4(rgb, u_cor.a);
 }
