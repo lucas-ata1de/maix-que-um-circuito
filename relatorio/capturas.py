@@ -165,18 +165,34 @@ def passo_jogando(j):
 def passo_aerea(j):
     capturar("camera_aerea")
     tecla(j, glfw.KEY_T)
-    tecla(j, glfw.KEY_2)
+    tecla(j, glfw.KEY_2)          # so a direcional
+    tecla(j, glfw.KEY_3)
 
 
 def passo_luz_dir(j):
     capturar("luz_direcional")
-    tecla(j, glfw.KEY_2)
+    tecla(j, glfw.KEY_2)          # so a pontual movel
     tecla(j, glfw.KEY_1)
 
 
 def passo_luz_pont(j):
     capturar("luz_pontual")
+    tecla(j, glfw.KEY_2)          # so os choques das torres
+    tecla(j, glfw.KEY_4)
+
+
+def passo_choque_torre(j):
+    capturar("luz_choque_torres")
+    tecla(j, glfw.KEY_4)          # so os choques das arestas
+    tecla(j, glfw.KEY_5)
+
+
+def passo_choque_aresta(j):
+    capturar("luz_choque_arestas")
+    tecla(j, glfw.KEY_5)          # tudo ligado de novo
     tecla(j, glfw.KEY_1)
+    tecla(j, glfw.KEY_2)
+    tecla(j, glfw.KEY_3)
     vista_textura()
 
 
@@ -210,8 +226,9 @@ def passo_vitoria(j):
 ROTEIRO = [
     (0.3, passo_inicio), (2.0, passo_vsync_off), (4.0, passo_vsync_on),
     (5.5, passo_jogando), (6.5, passo_aerea), (7.5, passo_luz_dir),
-    (8.5, passo_luz_pont), (9.5, passo_textura), (10.5, passo_pausa),
-    (11.5, passo_derrota), (13.5, passo_clique_vitoria), (14.0, passo_vitoria),
+    (8.5, passo_luz_pont), (9.5, passo_choque_torre), (10.5, passo_choque_aresta),
+    (11.5, passo_textura), (12.5, passo_pausa), (13.5, passo_derrota),
+    (15.5, passo_clique_vitoria), (16.0, passo_vitoria),
 ]
 
 

@@ -68,8 +68,7 @@ ou igual à meta.
 \paragraph{Controles.} \tecla{W}\tecla{A}\tecla{S}\tecla{D} andam,
 \tecla{Espaço}/\tecla{Shift} sobem e descem (câmera livre);
 \tecla{T} alterna a câmera; \tecla{Enter} inicia; \tecla{P} pausa;
-\tecla{R} reinicia com um novo grafo; \tecla{1}/\tecla{2} ligam e desligam a luz
-direcional e a pontual; \tecla{Y} liga e desliga o VSync; \tecla{C}/\tecla{V}
+\tecla{R} reinicia com um novo grafo; \tecla{1}/\tecla{2} ligam e desligam a luz direcional e a pontual móvel; \tecla{3} liga e desliga todas as luzes dos choques, \tecla{4} só as das torres e \tecla{5} só as das arestas; \tecla{Y} liga e desliga o VSync; \tecla{C}/\tecla{V}
 desligam e ligam o descarte de faces; \tecla{Esc} fecha. Mouse: clique esquerdo
 numa torre troca o lado dela; arrastar com o botão direito gira a câmera; a roda
 aproxima e afasta. A mesma lista está no início de \arq{main.py}.
@@ -88,7 +87,7 @@ aproxima e afasta. A mesma lista está no início de \arq{main.py}.
 \arq{grafo.py} & Classe \texttt{Graph}, geração $G(n,p)$ conexa, corte aleatorizado $\ge m/2$ e busca local (meta). & novo \\
 \arq{camera.py} & Classe \texttt{Camera}: modos livre e aéreo, matrizes de visão (LookAt) e projeção. & adaptado da apostila \\
 \arq{renderizador.py} & Classe \texttt{Renderizador}: única que conhece shaders, VAOs e uniforms; três passadas (objetos, linhas, placar). & novo \\
-\arq{material.py} & \texttt{Material}, \texttt{LuzDirecional}, \texttt{LuzPontual}, \texttt{CenaLuzes} e conversão sRGB$\to$linear. & adaptado da apostila \\
+\arq{material.py} & \texttt{Material}, \texttt{LuzDirecional}, \texttt{LuzPontual}, \texttt{CenaLuzes}, \texttt{ConfigLuzesChoque} (luzes dos choques) e conversão sRGB$\to$linear. & adaptado da apostila \\
 \arq{malha.py}, \arq{texturas.py} & Leitura do OFF, normais, mapeamento cilíndrico com costura; carga de imagens em \texttt{GL\_SRGB8\_ALPHA8} com mipmaps. & visualizador da apostila \\
 \arq{geometria.py} & Geometrias procedurais (piso, cubo, anel, segmento, quadrado do placar) e enquadramento da torre por matriz. & novo \\
 \bottomrule
@@ -109,9 +108,7 @@ de cada objeto. A lógica do jogo (\arq{jogo.py}, \arq{grafo.py}) não importa
 
 \paragraph{Shaders.} São dois programas.
 \arq{cena.vert}/\arq{cena.frag} desenham os objetos iluminados: o vertex shader
-leva posição e normal ao espaço da câmera; o fragment shader avalia
-Blinn--Phong para a luz direcional e para cada luz pontual e multiplica
-$\kappa_a$ e $\kappa_d$ pela cor da textura.
+leva posição e normal ao espaço da câmera; o fragment shader avalia Blinn--Phong para a luz direcional, para a luz pontual móvel e para as luzes dos choques (Seção~5) e multiplica $\kappa_a$ e $\kappa_d$ pela cor da textura, cujas coordenadas o vertex shader multiplica por \texttt{u\_uv\_escala}.
 \arq{linha.vert}/\arq{linha.frag} desenham as linhas e o placar com cor sólida.
 Nas arestas, o vertex shader desloca os vértices internos de um segmento
 unitário com senos que dependem do tempo, multiplicados pelo envelope
@@ -153,8 +150,8 @@ cada 0,25\,s.
 \toprule
 \textbf{Modo} & \textbf{FPS observado} \\
 \midrule
-VSync ligado & 60,2 \\
-VSync desligado & 279,5 (366,5 em outra execução) \\
+VSync ligado & 60,1 \\
+VSync desligado & 262,2 (entre 260 e 370 em outras execuções) \\
 \bottomrule
 \end{tabular}
 \caption{Taxas medidas pelo próprio contador do jogo, lidas do título pelo
@@ -163,16 +160,14 @@ script de capturas (janela 900$\times$900, placa integrada).}
 
 \paragraph{Animação autônoma.} Três elementos se movem sozinhos, em função do
 tempo de animação: os anéis no topo das torres giram em torno de $y$, as arestas
-faíscam e a luz pontual orbita a arena num círculo de raio 8 com uma leve
-oscilação vertical.
+faíscam a luz pontual orbita a arena num círculo de raio 8 com uma leve oscilação vertical, e as luzes dos choques cintilam (a intensidade oscila com senos do tempo).
 
 \paragraph{Estados e pausa.} Os estados são \texttt{START}, \texttt{PLAYING},
 \texttt{PAUSED}, \texttt{VICTORY} e \texttt{GAME\_OVER}. \tecla{Enter} inicia,
 \tecla{P} pausa e retoma, e \tecla{R} sorteia uma nova fase sem fechar o
 programa. Na pausa, nada se move: \texttt{EstadoJogo.atualizar} só desconta tempo
 em \texttt{PLAYING}, a câmera só anda em \texttt{START}/\texttt{PLAYING} e o
-tempo de animação (\texttt{tempo\_anim}), que comanda anéis, faíscas e luz, só
-avança fora da pausa e do fim de jogo. O tempo pausado não entra no $\Delta t$:
+tempo de animação (\texttt{tempo\_anim}), que comanda anéis, faíscas e luzes, só avança fora da pausa. No fim de jogo a cena continua animada, mas o cronômetro, os cliques e a câmera param. O tempo pausado não entra no $\Delta t$:
 o instante anterior é atualizado em todo quadro, inclusive durante a pausa,
 então o primeiro $\Delta t$ depois da retomada é de um quadro só, e ainda é
 limitado por \texttt{DT\_MAX}. No fim, o título mostra
@@ -190,8 +185,7 @@ da direita para a esquerda):
   $M_{\text{enq}} = S(4/h)\,T(-c_x,-y_{\min},-c_z)$, onde $h$ é a altura da caixa
   envolvente e $c$ o seu centro. Os vértices do arquivo vão para o VBO sem
   alteração; o enquadramento (pés em $y=0$, altura 4) é feito só pela matriz.
-\item \textbf{Bordas}: $T\,S(s_x,s_y,s_z)$ sobre o cubo unitário, com escala
-  \emph{não uniforme} (por exemplo $24{,}4\times0{,}4\times0{,}4$).
+\item \textbf{Bordas}: $T\,S$ (frente e fundo) e $T\,R_y(90^\circ)\,S$ (laterais) sobre o cubo unitário, com escala \emph{não uniforme} $S=(24{,}4;\,0{,}4;\,0{,}4)$ ou $(23{,}6;\,0{,}4;\,0{,}4)$. A rotação faz a textura correr ao longo do comprimento nas quatro bordas.
 \item \textbf{Anéis}: $T(\text{topo})\,R_y(2{,}2\,t + 0{,}7\,u)$.
 \item \textbf{Arestas}: $T(A)\,R_y(\operatorname{atan2}(d_x,d_z))\,S(1,1,\lVert B-A\rVert)$,
   que leva o segmento $(0,0,0)\to(0,0,1)$ até o segmento $A\to B$.
@@ -255,12 +249,27 @@ simplesmente $V = -p$.
 \toprule
 \textbf{Fonte} & \textbf{Parâmetros} \\
 \midrule
-Direcional (\tecla{1}) & direção $(-0{,}4,-1,-0{,}35)$, cor $(0{,}85;0{,}88;0{,}92)$, $f_a=0{,}22$. \\
-Pontual móvel (\tecla{2}) & órbita de raio 8 a $0{,}8$\,rad/s, altura $4+0{,}6\sin(1{,}6t)$; cor $(1{,}8;1{,}4;0{,}85)$, $f_a=0{,}08$; $k_c=1$, $k_l=0{,}05$, $k_q=0{,}012$. \\
+Direcional (\tecla{1}) & direção $(-0{,}4,-1,-0{,}35)$, cor $(1{,}20;1{,}22;1{,}26)$, $f_a=0{,}28$. \\
+Pontual móvel (\tecla{2}) & órbita de raio 8 a $0{,}8$\,rad/s, altura $4{,}5+0{,}6\sin(1{,}6t)$; cor $(4{,}40;3{,}45;2{,}15)$, $f_a=0{,}12$; $k_c=1$, $k_l=0{,}045$, $k_q=0{,}010$. \\
+Choques das torres (\tecla{3}/\tecla{4}) & uma fonte pontual por torre, 0,25 acima do topo; cor azul $(0{,}40;1{,}00;2{,}25)$ ou vermelha $(1{,}75;0{,}36;0{,}38)$ conforme o lado da torre, vezes $0{,}9+0{,}1\sin(7{,}5t+1{,}9u)$; $k_c=1$, $k_l=0{,}30$, $k_q=0{,}20$, $f_a=0{,}08$, alcance $R=4{,}8$. \\
+Choques das arestas (\tecla{3}/\tecla{5}) & fonte \emph{linear}: a luz parte do ponto do segmento $AB$ mais próximo do fragmento; cor amarela $(1{,}25;1{,}02;0{,}18)$ no corte e azul-escura $(0{,}12;0{,}16;0{,}24)$ fora, com intensidade $(1-a)+a\sin(\ldots)$, $a=0{,}15$ ou $0{,}06$; $k_c=1$, $k_l=0{,}48$, $k_q=0{,}32$, $f_a=0{,}03$, alcance $R=3{,}6$. \\
 \bottomrule
 \end{tabularx}
-\caption{As duas fontes, ativas ao mesmo tempo e alternáveis por tecla.}
+\caption{Fontes de luz. Todas ficam ativas ao mesmo tempo e podem ser alternadas por tecla. O shader aceita até 24 choques de torre e 48 de aresta; se houver mais arestas, as do corte têm prioridade.}
 \end{table}
+
+\paragraph{Luzes dos choques.} Com 16 torres e dezenas de arestas, somar
+todas as fontes com a atenuação comum clarearia a arena inteira. Por isso os
+choques usam uma atenuação com \emph{alcance finito} $R$:
+\[
+a(d) = \frac{\big(1-(d/R)^2\big)^2}{k_c + k_l d + k_q d^2}\ \text{ se } d<R,
+\qquad a(d)=0 \text{ caso contrário},
+\]
+e o shader pula a fonte quando $a=0$. Na luz de aresta, $d$ é a distância até
+o ponto $A + t(B-A)$ com
+$t=\operatorname{clamp}\!\big((p-A)\cdot(B-A)/\lVert B-A\rVert^2,\,0,\,1\big)$,
+o mesmo ponto mais próximo usado na colisão. As posições $A$, $B$ e as das
+torres são levadas ao espaço da câmera na CPU, como a luz pontual.
 
 \begin{table}[H]
 \centering\small
@@ -268,16 +277,16 @@ Pontual móvel (\tecla{2}) & órbita de raio 8 a $0{,}8$\,rad/s, altura $4+0{,}6
 \toprule
 \textbf{Material} & $\kappa_a$ & $\kappa_d$ & $\kappa_s$ & $\alpha$ \\
 \midrule
-Piso (textura) & $(0{,}30;0{,}30;0{,}30)$ & $(0{,}85;0{,}85;0{,}85)$ & $(0{,}08;0{,}08;0{,}08)$ & 12 \\
-Torre azul (textura) & $(0{,}10;0{,}22;0{,}42)$ & $(0{,}22;0{,}55;0{,}95)$ & $(0{,}75;0{,}82;0{,}90)$ & 96 \\
-Torre vermelha (textura) & $(0{,}42;0{,}10;0{,}12)$ & $(0{,}95;0{,}24;0{,}26)$ & $(0{,}88;0{,}75;0{,}72)$ & 96 \\
-Bordas & $(0{,}14;0{,}15;0{,}18)$ & $(0{,}38;0{,}42;0{,}48)$ & $(0{,}32;0{,}34;0{,}38)$ & 32 \\
+Piso (textura) & $(1{,}80;1{,}80;1{,}80)$ & $(3{,}60;3{,}60;3{,}60)$ & $(0{,}12;0{,}12;0{,}14)$ & 32 \\
+Torre azul (textura) & $(0{,}32;0{,}65;1{,}25)$ & $(0{,}55;1{,}25;2{,}35)$ & $(0{,}50;0{,}60;0{,}70)$ & 64 \\
+Torre vermelha (textura) & $(0{,}68;0{,}24;0{,}24)$ & $(1{,}40;0{,}44;0{,}42)$ & $(0{,}60;0{,}50;0{,}46)$ & 64 \\
+Bordas (textura) & $(0{,}16;0{,}16;0{,}16)$ & $(0{,}46;0{,}46;0{,}46)$ & $(0{,}04;0{,}04;0{,}04)$ & 12 \\
 \bottomrule
 \end{tabular}
-\caption{Materiais (coeficientes em espaço linear). O lado de cada torre é mostrado pela troca de material.}
+\caption{Materiais (coeficientes em espaço linear). O lado de cada torre é mostrado pela troca de material. Coeficientes acima de 1 compensam texturas escuras.}
 \end{table}
 
-Dos itens de iluminação, o jogo cumpre os cinco: dois tipos de fonte, uma fonte
+Dos itens de iluminação, o jogo cumpre os cinco: três tipos de fonte (direcional, pontual com atenuação e linear), uma fonte
 que se move, quatro materiais, matriz normal com objeto de escala não uniforme e
 todos os vetores no mesmo espaço (o da câmera).
 
@@ -290,11 +299,12 @@ todos os vetores no mesmo espaço (o da câmera).
 \toprule
 \textbf{Imagem} & \textbf{Objeto} & \textbf{Fonte e licença} \\
 \midrule
-\arq{piso\_circuito.png} (512$\times$512) & piso & \preencher{Poly Haven, \url{https://polyhaven.com/textures}, CC0 --- confirmar nome da textura, ou ``gerada pelo grupo''} \\
-\arq{metal\_torre.png} (512$\times$512) & torres & \preencher{Poly Haven, CC0 --- confirmar nome da textura} \\
+\arq{rubber\_tiles\_diff\_1k.jpg} & piso & Poly Haven, ``Rubber Tiles'', \url{https://polyhaven.com/a/rubber_tiles}, CC0 \\
+\arq{rusty\_metal\_04\_diff\_1k.jpg} & torres & Poly Haven, ``Rusty Metal 04'', \url{https://polyhaven.com/a/rusty_metal_04}, CC0 \\
+\arq{white\_stucco\_02\_diff\_1k.jpg} & bordas & Poly Haven, ``White Stucco 02'', \url{https://polyhaven.com/a/white_stucco_02}, CC0 \\
 \bottomrule
 \end{tabularx}
-\caption{Texturas de cor.}
+\caption{Texturas de cor (mapas difusos de $1024\times1024$).}
 \end{table}
 
 \paragraph{Coordenadas de textura.} No \textbf{piso}, são geradas junto com a
@@ -304,12 +314,9 @@ em torno de $y$ ($u$ pelo ângulo em torno do eixo, $v$ pela altura). A
 \textbf{costura} é tratada: num triângulo que cruza a linha $u=0/u=1$ (variação
 de $u$ maior que meia volta), os vértices com $u<0{,}5$ ganham uma cópia com
 $u+1$ e o triângulo passa a usar a cópia. A malha passa de 1247 para 1288
-vértices, e some a faixa em que a textura inteira apareceria espremida num
-único triângulo.
+vértices, e some a faixa em que a textura inteira apareceria espremida num único triângulo. Nas \textbf{bordas}, as coordenadas de 0 a 1 de cada face do cubo são multiplicadas no vertex shader por \texttt{u\_uv\_escala} $=(20,1)$, e a textura se repete 20 vezes ao longo do comprimento.
 
-\paragraph{Empacotamento e filtros.} As duas texturas usam
-\texttt{GL\_REPEAT}, necessário no piso, onde as coordenadas passam de 1, e na
-torre, por causa da costura com $u+1$. Os mipmaps são gerados na inicialização
+\paragraph{Empacotamento e filtros.} As três texturas usam \texttt{GL\_REPEAT}, necessário no piso e nas bordas, onde as coordenadas passam de 1, e na torre, por causa da costura com $u+1$. Os mipmaps são gerados na inicialização
 (\texttt{build\_mipmaps}) e a minificação é trilinear
 (\texttt{LINEAR\_MIPMAP\_LINEAR}, com filtragem anisotrópica de até 8 amostras);
 a magnificação é linear. Sem os mipmaps, o padrão do piso tremeria ao longe.
@@ -324,7 +331,7 @@ placar também são convertidas para linear (na CPU, uma vez, com
 desligado durante o \texttt{clear} e religado logo depois, evitando que ela seja
 codificada duas vezes.
 
-\paragraph{Modelo de terceiros.} A torre vem do modelo "High Voltage Transmission Line Tower (tileable)" (https://skfb.ly/ot8Sx) by mednios is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/). O arquivo OBJ foi convertido para OFF fora do programa por
+\paragraph{Modelo de terceiros.} A torre vem do modelo ``High Voltage Transmission Line Tower (tileable)'', de \emph{mednios} no Sketchfab (\url{https://skfb.ly/ot8Sx}), sob a licença Creative Commons Atribuição 4.0 (\url{http://creativecommons.org/licenses/by/4.0/}). O arquivo OBJ foi convertido para OFF fora do programa por
 um script Python. Os seis cabos e os isoladores, que se estendiam por 44
 unidades, foram descartados, e só a estrutura da torre foi mantida
 (1247 vértices, 2031 triângulos). As coordenadas restantes não foram alteradas.
@@ -398,9 +405,11 @@ risco verde é a meta e a barra azul é o tempo restante.
 
 \begin{figure}[H]
 \centering
-\fig{luz_direcional}{Só a luz direcional (L1 ligada, L2 desligada).}\hfill
-\fig{luz_pontual}{Só a luz pontual móvel (L1 desligada, L2 ligada).}\\[6pt]
-\fig{texturas}{Objetos texturizados: torre (metal, mapeamento cilíndrico) e piso (repetido).}
+\fig{luz_direcional}{Só a luz direcional (\tecla{1}).}\hfill
+\fig{luz_pontual}{Só a luz pontual móvel (\tecla{2}).}\\[6pt]
+\fig{luz_choque_torres}{Só os choques das torres: fontes pontuais locais (\tecla{4}).}\hfill
+\fig{luz_choque_arestas}{Só os choques das arestas: fontes lineares (\tecla{5}).}\\[6pt]
+\fig{texturas}{Todas as luzes. Texturas: torre (metal, mapeamento cilíndrico), piso e bordas (repetidas).}
 \caption{Cada tipo de fonte de luz e as texturas.}
 \end{figure}
 
@@ -419,7 +428,7 @@ risco verde é a meta e a barra azul é o tempo restante.
 \item \textbf{Gabriel Frigo}: \arq{renderizador.py} (passadas de desenho, matriz
   normal, luzes no espaço da câmera, controle do sRGB); \arq{material.py} (luzes e
   materiais); integração de \arq{malha.py} e \arq{texturas.py}; shaders
-  \arq{cena.vert/.frag} e \arq{linha.vert/.frag}; escolha das texturas;
+  \arq{cena.vert/.frag} e \arq{linha.vert/.frag}; luzes dos choques (fontes locais nas torres e lineares nas arestas, teclas 3 a 5); escolha das texturas do Poly Haven, incluindo a das bordas;
   reorganização de \arq{main.py} em torno do renderizador; lista de controles;
   \arq{Makefile}, \arq{requirements.txt} e \arq{README.md}.
 \end{itemize}
